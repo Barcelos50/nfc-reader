@@ -1,250 +1,13 @@
-// Aplicar categorização automática
-        function aplicarCategorizacaoAutomatica(nota) {
-            const categoriaDetectada = categorizarAutomaticamente(nota.estabelecimento);
-            
-            // Verificar se a categoria já existe
-            if (!categorias[categoriaDetectada.id]) {
-                categorias[categoriaDetectada.id] = {
-                    id: categoriaDetectada.id,
-                    nome: categoriaDetectada.nome,
-                    totais: {}
-                };
-            }
-            
-            return categoriaDetectada.id;
-        }
-
-        // Salvar nota (modificado para categorização automática)
-        async function salvarNota(e) {
-            e.preventDefault();
-            
-            if (!notaAtual) {
-                mostrarToast('Erro: Nenhuma nota para salvar', 'error');
-                return;
-            }
-            
-            const loading = document.getElementById('loadingSalvar');
-            loading.classList.remove('hidden');
-            
-            try {
-                // Aplicar categorização automática
-                const categoriaId = aplicarCategorizacaoAutomatica(notaAtual);
-                
-                // Adicionar nota
-                const anoMes = notaAtual.data.substring(0, 7).replace('-', '');
-                notaAtual.categoriaId = categoriaId;
-                notaAtual.anoMes = anoMes;
-                
-                notas.push(notaAtual);
-                
-                // Atualizar totais da categoria
-                if (!categorias[categoriaId].totais[anoMes]) {
-                    categorias[categoriaId].totais[anoMes] = 0;
-                }
-                categorias[categoriaId].totais[anoMes] += notaAtual.valor;
-                
-                await salvarDados();
-                
-                loading.classList.add('hidden');
-                document.getElementById('modalClassificar').classList.remove('active');
-                
-                atualizarInterface();
-                
-                const categoria = categorias[categoriaId];
-                mostrarToast(`✅ Nota salva em "${categoria.nome}" automaticamente!`);
-                
-                // Limpar variáveis
-                notaAtual = null;
-                
-            } catch (error) {
-                console.error('Erro ao salvar nota:', error);
-                mostrarToast('Erro ao salvar nota', 'error');
-                loading.classList.add('hidden');
-            }
-        }
-
-        // Mostrar modal classificar (modificado para mostrar categoria detectada)
-        function mostrarModalClassificar() {
-            if (!notaAtual) return;
-            
-            // Detectar categoria automaticamente
-            const categoriaDetectada = categorizarAutomaticamente(notaAtual.estabelecimento);
-            
-            // Preencher dados da nota
-            document.getElementById('dadosNota').innerHTML = `
-                <div><strong>Estabelecimento:</strong> ${notaAtual.estabelecimento}</div>
-                <div><strong>Data:</strong> ${formatarData(notaAtual.data)}</div>
-                <div><strong>Valor:</strong> ${formatarMoeda(notaAtual.valor)}</div>
-                <div style="margin-top: 10px; padding: 8px; background: var(--success); color: white; border-radius: 6px;">
-                    <strong>📂 Categoria detectada:</strong> ${categoriaDetectada.nome}
-                </div>
-            `;
-            
-            // Esconder o formulário de seleção de categoria
-            document.getElementById('formClassificar').style.display = 'none';
-            
-            // Criar botões de ação
-            const actionsHTML = `
-                <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1rem;">
-                    <button type="button" class="btn btn-secondary" onclick="cancelarClassificacao()">Cancelar</button>
-                    <button type="button" class="btn btn-warning btn-sm" onclick="mostrarOpcoesCategorias()">
-                        ⚙️ Alterar Categoria
-                    </button>
-                    <button type="button" class="btn btn-primary" onclick="salvarNotaAutomatica()">
-                        <span class="loading hidden" id="loadingSalvarAuto"></span>
-                        ✅ Salvar em "${categoriaDetectada.nome}"
-                    </button>
-                </div>
-            `;
-            
-            // Adicionar botões ao modal
-            const formContainer = document.getElementById('formClassificar').parentElement;
-            const existingActions = formContainer.querySelector('.auto-actions');
-            if (existingActions) {
-                existingActions.remove();
-            }
-            
-            const actionsDiv = document.createElement('div');
-            actionsDiv.className = 'auto-actions';
-            actionsDiv.innerHTML = actionsHTML;
-            formContainer.appendChild(actionsDiv);
-            
-            document.getElementById('modalClassificar').classList.add('active');
-        }
-
-        // Salvar nota automaticamente
-        window.salvarNotaAutomatica = async function() {
-            const loading = document.getElementById('loadingSalvarAuto');
-            loading.classList.remove('hidden');
-            
-            try {
-                // Simular evento de submit
-                await salvarNota({ preventDefault: () => {} });
-            } catch (error) {
-                console.error('Erro ao salvar automático:', error);
-                loading.classList.add('hidden');
-            }
-        };
-
-        // Mostrar opções de categorias (para alterar manualmente)
-        window.mostrarOpcoesCategorias = function() {
-            document.getElementById('formClassificar').style.display = 'block';
-            document.querySelector('.auto-actions').style.display = 'none';
-            
-            // Preencher select de categorias
-            const select = document.getElementById('selectCategoria');
-            select.innerHTML = '<option value="">Selecione uma categoria</option>';
-            
-            Object.keys(categorias).forEach(id => {
-                const option = document.createElement('option');
-                option.value = id;
-                option.textContent = categorias[id].nome;
-                select.appendChild(option);
-            });
-            
-            select.innerHTML += '<option value="nova">+ Nova Categoria</option>';
-        };
-
-        // Cancelar classificação (modificado)
-        function cancelarClassificacao() {
-            document.getElementById('modalClassificar').classList.remove('active');
-            document.getElementById('formClassificar').style.display = 'block';
-            
-            const actionsDiv = document.querySelector('.auto-actions');
-            if (actionsDiv) {
-                actionsDiv.remove();
-            }
-            
-            notaAtual = null;
-        }
-
-        // Botão de teste (modificado para testar categorização)
-        function adicionarBotaoTeste() {
-            const testButton = document.createElement('button');
-            testButton.textContent = '🧪 Teste QR';
-            testButton.className = 'btn btn-secondary btn-sm';
-            testButton.style.position = 'fixed';
-            testButton.style.top = '1rem';
-            testButton.style.right = '1rem';
-            testButton.style.zIndex = '1000';
-            testButton.onclick = async function() {
-                // Simular QR Codes diferentes para testar categorização
-                const qrsTeste = [
-                    "https://www.fazenda.sp.gov.br/nfce/qrcode?chNFe=35200114200166000187650010000000047000000047&nVersao=100&tpAmb=1&dhEmi=20250601143000&vNF=45.80&vICMS=3.50&digVal=abcd1234&cIdToken=123456", // Supermercado
-                    "https://nfce.fazenda.rs.gov.br/qrcode?chNFe=43200198765432000143650010000000048000000048&tpAmb=1&dhEmi=20250601160000&vNF=28.90&digVal=xyz789", // Farmácia
-                    "https://sat.fazenda.go.gov.br/qrcode?chNFe=52200111222333000144650010000000049000000049&tpAmb=1&dhEmi=20250601180000&vNF=120.00&digVal=def456" // Posto
-                ];
-                
-                const qrEscolhido = qrsTeste[Math.floor(Math.random() * qrsTeste.length)];
-                
-                // Simular diferentes estabelecimentos para testar categorização
-                const estabelecimentosTeste = [
-                    'SUPERMERCADO BRASIL LTDA',
-                    'FARMACIA POPULAR LTDA', 
-                    'POSTO SHELL COMBUSTIVEIS',
-                    'PADARIA PÃO DOURADO',
-                    'RESTAURANTE SABOR & ARTE',
-                    'MAGAZINE LUIZA LOJA',
-                    'MATERIAL CONSTRUÇÃO C&C'
-                ];
-                
-                mostrarToast('Processando QR Code de teste...', 'info');
-                
-                // Simular nota com estabelecimento aleatório
-                setTimeout(async () => {
-                    const estabelecimentoTeste = estabelecimentosTeste[Math.floor(Math.random() * estabelecimentosTeste.length)];
-                    
-                    notaAtual = {
-                        id: generateId(),
-                        estabelecimento: estabelecimentoTeste,
-                        valor: (Math.random() * 150 + 10),
-                        data: new Date().toISOString().split('T')[0],
-                        qrCode: qrEscolhido,
-                        chave: qrEscolhido.match(/chNFe=([A-Fa-f0-9]{44})/)?.[1] || '',
-                        dadosCompletos: {
-                            emit_nome: estabelecimentoTeste,
-                            emit_cnpj: '12.345.678/0001-90',
-                            emit_endereco: 'RUA TESTE, 123 - CENTRO',
-                            vNF: (Math.random() * 150 + 10).toFixed(2),
-                            dhEmi: new Date().toISOString(),
-                            numero: Math.floor(Math.random() * 999999),
-                            serie: '1',
-                            produtos: [
-                                { nome: 'PRODUTO TESTE', qtd: '1,000', valor: (Math.random() * 50 + 5).toFixed(2) }
-                            ]
-                        }
-                    };
-                    
-                    mostrarModalClassificar();
-                }, 1000);
-            };
-            document.body.appendChild(testButton);
-        }<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leitor NFC-e</title>
-    <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiTGVpdG9yIE5GQy1lIiwic2hvcnRfbmFtZSI6Ik5GQy1lIiwic3RhcnRfdXJsIjoiLyIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiYmFja2dyb3VuZF9jb2xvciI6IiNmZmZmZmYiLCJ0aGVtZV9jb2xvciI6IiMyNTYzZWIifQ==">
+    <title>Leitor QR Code - Notas Fiscais</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
-        :root {
-            --primary: #2563eb;
-            --primary-dark: #1d4ed8;
-            --success: #10b981;
-            --danger: #ef4444;
-            --warning: #f59e0b;
-            --gray-50: #f9fafb;
-            --gray-100: #f3f4f6;
-            --gray-200: #e5e7eb;
-            --gray-300: #d1d5db;
-            --gray-400: #9ca3af;
-            --gray-500: #6b7280;
-            --gray-600: #4b5563;
-            --gray-700: #374151;
-            --gray-800: #1f2937;
-            --gray-900: #111827;
-        }
-
         * {
             margin: 0;
             padding: 0;
@@ -252,1772 +15,775 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--gray-50);
-            color: var(--gray-900);
-            line-height: 1.6;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
         }
 
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 1rem;
+            padding: 20px;
         }
 
         .header {
-            background: white;
-            padding: 1rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            margin-bottom: 2rem;
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
         }
 
         .header h1 {
-            color: var(--primary);
-            font-size: 1.5rem;
-            font-weight: 700;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
 
-        .fab {
-            position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            background: var(--primary);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            font-size: 24px;
-            cursor: pointer;
-            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-            transition: all 0.3s ease;
-            z-index: 1000;
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
         }
 
-        .fab:hover {
-            background: var(--primary-dark);
-            transform: scale(1.1);
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
         }
 
         .card {
             background: white;
-            padding: 1.5rem;
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            margin-bottom: 1rem;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
         }
 
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
+        .card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
         }
 
-        .card-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: var(--gray-800);
+        .scanner-area {
+            text-align: center;
+            margin-bottom: 20px;
         }
 
-        .badge {
-            background: var(--primary);
-            color: white;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.875rem;
-            font-weight: 500;
-        }
-
-        .grid {
-            display: grid;
-            gap: 1rem;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        #qr-reader {
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+            border-radius: 10px;
+            overflow: hidden;
         }
 
         .btn {
-            padding: 0.75rem 1.5rem;
-            border: none;
-            border-radius: 8px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            justify-content: center;
-        }
-
-        .btn-primary {
-            background: var(--primary);
+            background: linear-gradient(45deg, #667eea, #764ba2);
             color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin: 10px 5px;
+            text-decoration: none;
+            display: inline-block;
         }
 
-        .btn-primary:hover {
-            background: var(--primary-dark);
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         }
 
         .btn-danger {
-            background: var(--danger);
-            color: white;
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
         }
 
         .btn-success {
-            background: #10b981;
-            color: white;
+            background: linear-gradient(45deg, #2ecc71, #27ae60);
         }
 
-        .btn-success:hover {
-            background: #059669;
+        .category-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
         }
 
-        .btn-sm {
-            padding: 0.5rem 1rem;
-            font-size: 0.875rem;
+        .category-item {
+            background: linear-gradient(135deg, #667eea20, #764ba220);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            border-left: 4px solid #667eea;
+        }
+
+        .category-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .notes-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .note-item {
+            background: #f8f9fa;
+            margin-bottom: 10px;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .note-item:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+
+        .note-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .note-title {
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: #333;
+        }
+
+        .note-value {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #2ecc71;
+        }
+
+        .note-details {
+            font-size: 0.9rem;
+            color: #666;
         }
 
         .modal {
             display: none;
             position: fixed;
-            top: 0;
+            z-index: 1000;
             left: 0;
+            top: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.5);
-            z-index: 2000;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal.active {
-            display: flex;
+            background-color: rgba(0,0,0,0.5);
+            backdrop-filter: blur(5px);
         }
 
         .modal-content {
-            background: white;
-            padding: 2rem;
-            border-radius: 12px;
-            max-width: 500px;
+            background-color: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 15px;
             width: 90%;
-            max-height: 90vh;
+            max-width: 600px;
+            max-height: 80vh;
             overflow-y: auto;
+            position: relative;
         }
 
-        .form-group {
-            margin-bottom: 1rem;
-        }
-
-        .form-label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-            color: var(--gray-700);
-        }
-
-        .form-input, .form-select {
-            width: 100%;
-            padding: 0.75rem;
-            border: 1px solid var(--gray-300);
-            border-radius: 8px;
-            font-size: 1rem;
-        }
-
-        .form-input:focus, .form-select:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-        }
-
-        .camera-container {
-            width: 100%;
-            max-width: 400px;
-            margin: 0 auto;
-        }
-
-        #reader {
-            width: 100%;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-
-        .toast {
-            position: fixed;
-            top: 2rem;
-            right: 2rem;
-            background: var(--success);
-            color: white;
-            padding: 1rem 1.5rem;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            transform: translateX(400px);
-            transition: transform 0.3s ease;
-            z-index: 3000;
-        }
-
-        .toast.show {
-            transform: translateX(0);
-        }
-
-        .total-section {
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            color: white;
-            padding: 2rem;
-            border-radius: 12px;
-            margin-bottom: 2rem;
-            text-align: center;
-        }
-
-        .total-section h2 {
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .categoria-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem;
-            border: 1px solid var(--gray-200);
-            border-radius: 8px;
-            margin-bottom: 0.5rem;
+        .close {
+            position: absolute;
+            right: 20px;
+            top: 15px;
+            font-size: 28px;
+            font-weight: bold;
             cursor: pointer;
-            transition: all 0.2s ease;
+            color: #aaa;
         }
 
-        .categoria-item:hover {
-            background: var(--gray-50);
-            border-color: var(--primary);
+        .close:hover {
+            color: #333;
         }
 
-        .nota-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem;
-            border-bottom: 1px solid var(--gray-200);
-        }
-
-        .nota-item:last-child {
-            border-bottom: none;
-        }
-
-        .nota-info {
-            flex: 1;
-        }
-
-        .nota-estabelecimento {
-            font-weight: 600;
-            color: var(--gray-800);
-        }
-
-        .nota-data {
-            color: var(--gray-500);
-            font-size: 0.875rem;
-        }
-
-        .nota-valor {
-            font-weight: 700;
-            color: var(--primary);
-            font-size: 1.1rem;
-        }
-
-        .nota-actions {
-            display: flex;
-            gap: 0.5rem;
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 20px;
         }
 
         .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 2px solid var(--gray-300);
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
             border-radius: 50%;
-            border-top-color: var(--primary);
+            width: 40px;
+            height: 40px;
             animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
-        .filters {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-            flex-wrap: wrap;
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid transparent;
+            border-radius: 8px;
         }
 
-        .filter-btn {
-            padding: 0.5rem 1rem;
-            border: 1px solid var(--gray-300);
-            background: white;
-            border-radius: 20px;
-            cursor: pointer;
-            transition: all 0.2s ease;
+        .alert-success {
+            color: #155724;
+            background-color: #d4edda;
+            border-color: #c3e6cb;
         }
 
-        .filter-btn.active {
-            background: var(--primary);
-            color: white;
-            border-color: var(--primary);
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 0.5rem;
-            }
-            
-            .modal-content {
-                margin: 1rem;
-                width: calc(100% - 2rem);
-            }
-            
-            .fab {
-                bottom: 1rem;
-                right: 1rem;
-            }
-            
-            .total-section h2 {
-                font-size: 2rem;
-            }
+        .alert-danger {
+            color: #721c24;
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
         }
 
         .hidden {
-            display: none !important;
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+            
+            .category-summary {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>📱 Leitor NFC-e</h1>
-    </div>
-
     <div class="container">
-        <!-- Seção de Totais -->
-        <div class="total-section">
-            <h2 id="totalGeral">R$ 0,00</h2>
-            <p>Total Geral</p>
-            <div style="margin-top: 1rem;">
-                <span>Este mês: <strong id="totalMes">R$ 0,00</strong></span>
+        <div class="header">
+            <h1>📱 Leitor QR Code</h1>
+            <p>Gerencie suas notas fiscais de forma inteligente</p>
+        </div>
+
+        <div class="dashboard">
+            <!-- Scanner Card -->
+            <div class="card">
+                <h3>📷 Scanner QR Code</h3>
+                <div class="scanner-area">
+                    <div id="qr-reader" style="display: none;"></div>
+                    <button id="start-scan" class="btn">Iniciar Scanner</button>
+                    <button id="stop-scan" class="btn btn-danger" style="display: none;">Parar Scanner</button>
+                </div>
+                
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>Processando nota fiscal...</p>
+                </div>
+                
+                <div id="alert-container"></div>
+            </div>
+
+            <!-- Resumo Mensal -->
+            <div class="card">
+                <h3>📊 Resumo do Mês</h3>
+                <div class="category-summary" id="monthly-summary">
+                    <div class="category-item">
+                        <div class="category-value" id="total-month">R$ 0,00</div>
+                        <div>Total do Mês</div>
+                    </div>
+                    <div class="category-item">
+                        <div class="category-value" id="total-notes">0</div>
+                        <div>Notas Cadastradas</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Categorias -->
+            <div class="card">
+                <h3>🏷️ Por Categoria</h3>
+                <div class="category-summary" id="categories-summary">
+                    <!-- Categorias serão inseridas aqui -->
+                </div>
+                <div class="chart-container">
+                    <canvas id="categoryChart"></canvas>
+                </div>
             </div>
         </div>
 
-        <!-- Filtros -->
-        <div class="filters">
-            <button class="filter-btn active" data-filter="todos">Todos</button>
-            <button class="filter-btn" data-filter="mes-atual">Mês Atual</button>
-            <button class="filter-btn" data-filter="30-dias">Últimos 30 dias</button>
-            <button class="filter-btn" data-filter="mes-anterior">Mês Anterior</button>
-        </div>
-
-        <!-- Lista de Categorias -->
+        <!-- Lista de Notas -->
         <div class="card">
-            <div class="card-header">
-                <h3 class="card-title">Categorias</h3>
-                <button class="btn btn-secondary btn-sm" onclick="exportarPDF()">
-                    📄 Exportar PDF
-                </button>
-            </div>
-            <div id="listaCategorias">
-                <p style="text-align: center; color: var(--gray-500); padding: 2rem;">
-                    Nenhuma nota encontrada. Escaneie sua primeira nota fiscal!
+            <h3>📄 Notas Fiscais Recentes</h3>
+            <div class="notes-list" id="notes-list">
+                <p style="text-align: center; color: #666; padding: 20px;">
+                    Nenhuma nota fiscal cadastrada ainda.<br>
+                    Use o scanner acima para começar!
                 </p>
             </div>
         </div>
     </div>
 
-    <!-- FAB para escanear -->
-    <button class="fab" onclick="abrirScanner()" title="Escanear Nota">
-        📷
-    </button>
-
-    <!-- Modal Scanner -->
-    <div id="modalScanner" class="modal">
+    <!-- Modal de Detalhes -->
+    <div id="note-modal" class="modal">
         <div class="modal-content">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h3>Escanear QR Code</h3>
-                <button class="btn btn-secondary btn-sm" onclick="fecharScanner()">✕</button>
-            </div>
-            <div class="camera-container">
-                <div id="reader"></div>
-            </div>
-            <p style="text-align: center; margin-top: 1rem; color: var(--gray-600);">
-                Aponte a câmera para o QR Code da nota fiscal
-            </p>
+            <span class="close">&times;</span>
+            <div id="note-details"></div>
         </div>
     </div>
 
-    <!-- Modal Classificar Nota -->
-    <div id="modalClassificar" class="modal">
-        <div class="modal-content">
-            <h3>Classificar Nota Fiscal</h3>
-            <div id="dadosNota" style="background: var(--gray-50); padding: 1rem; border-radius: 8px; margin: 1rem 0;">
-                <!-- Dados da nota serão inseridos aqui -->
-            </div>
-            <form id="formClassificar">
-                <div class="form-group">
-                    <label class="form-label">Categoria</label>
-                    <select id="selectCategoria" class="form-select">
-                        <option value="">Selecione uma categoria</option>
-                        <option value="nova">+ Nova Categoria</option>
-                    </select>
-                </div>
-                <div class="form-group hidden" id="groupNovaCategoria">
-                    <label class="form-label">Nome da Nova Categoria</label>
-                    <input type="text" id="inputNovaCategoria" class="form-input" placeholder="Ex: Mercado, Farmácia, Combustível">
-                </div>
-                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
-                    <button type="button" class="btn btn-secondary" onclick="cancelarClassificacao()">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">
-                        <span class="loading hidden" id="loadingSalvar"></span>
-                        Salvar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Modal Detalhes da Categoria -->
-    <div id="modalDetalhes" class="modal">
-        <div class="modal-content">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h3 id="tituloDetalhes">Detalhes da Categoria</h3>
-                <button class="btn btn-secondary btn-sm" onclick="fecharDetalhes()">✕</button>
-            </div>
-            <div id="listaNotas">
-                <!-- Lista de notas será inserida aqui -->
-            </div>
-        </div>
-    </div>
-
-    <!-- Toast para notificações -->
-    <div id="toast" class="toast">
-        <span id="toastMessage"></span>
-    </div>
-
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-    <script src="https://unpkg.com/localforage@1.10.0/dist/localforage.min.js"></script>
-    <script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script>
-        // Configuração do LocalForage para IndexedDB
-        localforage.config({
-            name: 'NFCeReader',
-            version: 1.0,
-            storeName: 'dados'
-        });
-
-        // Variáveis globais
-        let html5QrcodeScanner = null;
-        let notaAtual = null;
-        let categorias = {};
-        let notas = [];
-        let filtroAtivo = 'todos';
-
-        // Inicialização
-        document.addEventListener('DOMContentLoaded', async () => {
-            await carregarDados();
-            atualizarInterface();
-            configurarEventos();
-            adicionarBotaoTeste(); // Para testes
-            
-            // Registrar Service Worker (simulado)
-            if ('serviceWorker' in navigator) {
-                console.log('Service Worker suportado');
+        class NFManager {
+            constructor() {
+                this.notes = JSON.parse(localStorage.getItem('nf-notes') || '[]');
+                this.html5QrCode = null;
+                this.categories = {
+                    'alimentacao': { name: 'Alimentação', color: '#e74c3c' },
+                    'transporte': { name: 'Transporte', color: '#3498db' },
+                    'lazer': { name: 'Lazer', color: '#9b59b6' },
+                    'saude': { name: 'Saúde', color: '#2ecc71' },
+                    'educacao': { name: 'Educação', color: '#f39c12' },
+                    'casa': { name: 'Casa/Utilidades', color: '#34495e' },
+                    'roupas': { name: 'Vestuário', color: '#e67e22' },
+                    'outros': { name: 'Outros', color: '#95a5a6' }
+                };
+                this.chart = null;
+                
+                this.init();
             }
-        });
 
-        // Adicionar dados de teste ao carregar (apenas para demonstração)
-        window.addEventListener('load', () => {
-            setTimeout(adicionarDadosTeste, 1000);
-        });
+            init() {
+                this.setupEventListeners();
+                this.updateDashboard();
+                this.renderNotesList();
+            }
 
-        // Configurar eventos
-        function configurarEventos() {
-            // Filtros
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-                    e.target.classList.add('active');
-                    filtroAtivo = e.target.dataset.filter;
-                    atualizarInterface();
+            setupEventListeners() {
+                document.getElementById('start-scan').addEventListener('click', () => this.startScanner());
+                document.getElementById('stop-scan').addEventListener('click', () => this.stopScanner());
+                
+                // Modal events
+                const modal = document.getElementById('note-modal');
+                const closeBtn = document.querySelector('.close');
+                
+                closeBtn.addEventListener('click', () => {
+                    modal.style.display = 'none';
                 });
-            });
-
-            // Form classificar
-            document.getElementById('formClassificar').addEventListener('submit', salvarNota);
-            
-            // Select categoria
-            document.getElementById('selectCategoria').addEventListener('change', (e) => {
-                const novaCategoria = document.getElementById('groupNovaCategoria');
-                if (e.target.value === 'nova') {
-                    novaCategoria.classList.remove('hidden');
-                } else {
-                    novaCategoria.classList.add('hidden');
-                }
-            });
-        }
-
-        // Carregar dados do IndexedDB
-        async function carregarDados() {
-            try {
-                categorias = await localforage.getItem('categorias') || {};
-                notas = await localforage.getItem('notas') || [];
-                console.log('Dados carregados:', { categorias, notas });
-            } catch (error) {
-                console.error('Erro ao carregar dados:', error);
-                mostrarToast('Erro ao carregar dados', 'error');
-            }
-        }
-
-        // Salvar dados no IndexedDB
-        async function salvarDados() {
-            try {
-                await localforage.setItem('categorias', categorias);
-                await localforage.setItem('notas', notas);
-                console.log('Dados salvos');
-            } catch (error) {
-                console.error('Erro ao salvar dados:', error);
-                mostrarToast('Erro ao salvar dados', 'error');
-            }
-        }
-
-        // Abrir scanner
-        function abrirScanner() {
-            document.getElementById('modalScanner').classList.add('active');
-            iniciarScanner();
-        }
-
-        // Fechar scanner
-        function fecharScanner() {
-            if (html5QrcodeScanner) {
-                html5QrcodeScanner.stop();
-                html5QrcodeScanner = null;
-            }
-            document.getElementById('modalScanner').classList.remove('active');
-        }
-
-        // Iniciar scanner
-        function iniciarScanner() {
-            const config = {
-                fps: 10,
-                qrbox: { width: 250, height: 250 },
-                rememberLastUsedCamera: true
-            };
-
-            html5QrcodeScanner = new Html5Qrcode("reader");
-            
-            html5QrcodeScanner.start(
-                { facingMode: "environment" },
-                config,
-                onScanSuccess,
-                onScanError
-            );
-        }
-
-        // Sucesso no scan
-        async function onScanSuccess(decodedText, decodedResult) {
-            console.log('QR Code detectado:', decodedText);
-            
-            fecharScanner();
-            
-            // Processar QR Code da nota fiscal
-            const dadosNota = await processarQRCode(decodedText);
-            
-            if (dadosNota) {
-                notaAtual = dadosNota;
-                mostrarModalClassificar();
-            } else {
-                mostrarToast('QR Code não é de uma nota fiscal válida', 'error');
-            }
-        }
-
-        // Erro no scan
-        function onScanError(error) {
-            // Silenciosamente ignora erros de scan
-        }
-
-        // Processar QR Code
-        async function processarQRCode(qrText) {
-            try {
-                console.log('QR Code recebido:', qrText);
                 
-                // Verificar padrões de QR Code de notas fiscais brasileiras
-                const padroes = [
-                    /chNFe/i,                    // Chave da NF-e
-                    /nfce/i,                     // NFC-e
-                    /sat/i,                      // SAT
-                    /\.fazenda\./i,              // Portal da Fazenda
-                    /sefaz/i,                    // SEFAZ
-                    /nfe\.fazenda/i,             // Portal NFe
-                    /\d{44}/,                    // Chave de 44 dígitos
-                    /tpAmb=[12]/,                // Tipo ambiente
-                    /dhEmi=/,                    // Data emissão
-                    /vNF=/,                      // Valor da nota
-                    /http.*fazenda.*gov\.br/i    // URL do governo
-                ];
-                
-                const isNotaFiscal = padroes.some(padrao => padrao.test(qrText));
-                
-                if (isNotaFiscal) {
-                    return await extrairDadosReais(qrText);
-                }
-                
-                return null;
-            } catch (error) {
-                console.error('Erro ao processar QR Code:', error);
-                return null;
-            }
-        }
-
-        // Extrair dados reais do QR Code
-        async function extrairDadosReais(qrText) {
-            try {
-                mostrarToast('Buscando dados da nota fiscal...', 'info');
-                
-                const dados = {
-                    id: generateId(),
-                    estabelecimento: 'Carregando...',
-                    valor: 0,
-                    data: new Date().toISOString().split('T')[0],
-                    qrCode: qrText,
-                    dadosCompletos: null
-                };
-
-                // Extrair parâmetros da URL do QR Code brasileiro
-                const urlParams = extrairParametrosQRBrasil(qrText);
-                console.log('Parâmetros extraídos:', urlParams);
-
-                // Extrair dados básicos do QR Code
-                if (urlParams.chNFe) {
-                    dados.chave = urlParams.chNFe;
-                }
-
-                if (urlParams.vNF) {
-                    dados.valor = parseFloat(urlParams.vNF.replace(',', '.'));
-                }
-
-                if (urlParams.dhEmi) {
-                    const dataEmissao = urlParams.dhEmi.replace(/(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6');
-                    dados.data = dataEmissao.split('T')[0];
-                } else if (urlParams.dEmi) {
-                    dados.data = urlParams.dEmi;
-                }
-
-                // Tentar extrair CNPJ do estabelecimento da própria chave
-                if (urlParams.chNFe) {
-                    const cnpjChave = urlParams.chNFe.substring(6, 20); // Posições 7-20 da chave
-                    dados.cnpjEstabelecimento = formatarCNPJ(cnpjChave);
-                }
-
-                // Buscar dados completos na SEFAZ
-                const dadosCompletos = await buscarDadosSEFAZBrasil(qrText, urlParams);
-                
-                if (dadosCompletos) {
-                    dados.estabelecimento = dadosCompletos.emit_nome || dados.estabelecimento;
-                    dados.dadosCompletos = dadosCompletos;
-                    
-                    if (dadosCompletos.vNF && dados.valor === 0) {
-                        dados.valor = parseFloat(dadosCompletos.vNF.replace(',', '.'));
+                window.addEventListener('click', (event) => {
+                    if (event.target === modal) {
+                        modal.style.display = 'none';
                     }
-                }
-
-                // Se ainda não temos estabelecimento, gerar baseado no CNPJ/chave
-                if (dados.estabelecimento === 'Carregando...' || !dados.estabelecimento) {
-                    dados.estabelecimento = gerarNomeEstabelecimento(dados.cnpjEstabelecimento);
-                }
-
-                // Se valor ainda é 0, usar o que está no QR ou gerar
-                if (dados.valor === 0) {
-                    dados.valor = parseFloat(urlParams.vNF?.replace(',', '.')) || (Math.random() * 200 + 10);
-                }
-
-                mostrarToast('Dados extraídos com sucesso!');
-                return dados;
-
-            } catch (error) {
-                console.error('Erro ao extrair dados:', error);
-                mostrarToast('Erro ao processar nota fiscal', 'error');
-                return null;
+                });
             }
-        }
 
-        // Extrair parâmetros específicos do QR Code brasileiro
-        function extrairParametrosQRBrasil(qrText) {
-            const params = {};
-            
-            try {
-                // Padrões específicos das notas fiscais brasileiras
-                const patterns = {
-                    // Chave de acesso (44 dígitos)
-                    chNFe: /(?:chNFe=|chave=|p=)?([0-9]{44})/i,
+            async startScanner() {
+                try {
+                    const qrReader = document.getElementById('qr-reader');
+                    qrReader.style.display = 'block';
                     
-                    // Valor da nota
-                    vNF: /(?:vNF=|valor=|v=)([0-9.,]+)/i,
+                    this.html5QrCode = new Html5Qrcode("qr-reader");
                     
-                    // Data/hora de emissão (vários formatos)
-                    dhEmi: /(?:dhEmi=|dEmi=|d=)([0-9T:-]+)/i,
-                    
-                    // Tipo de ambiente (1=produção, 2=homologação)
-                    tpAmb: /(?:tpAmb=|amb=)([12])/i,
-                    
-                    // Valor do ICMS
-                    vICMS: /(?:vICMS=|icms=)([0-9.,]+)/i,
-                    
-                    // Digest Value
-                    digVal: /(?:digVal=|dig=)([A-Za-z0-9+/=]+)/i,
-                    
-                    // Token
-                    cIdToken: /(?:cIdToken=|token=|t=)([A-Za-z0-9]+)/i
-                };
-                
-                // Tentar extrair como URL primeiro
-                if (qrText.includes('?') && qrText.includes('=')) {
-                    try {
-                        const url = new URL(qrText);
-                        url.searchParams.forEach((value, key) => {
-                            params[key] = value;
-                        });
-                    } catch (e) {
-                        console.warn('Não é uma URL válida, usando regex');
-                    }
-                }
-                
-                // Usar regex para capturar padrões específicos
-                Object.keys(patterns).forEach(key => {
-                    if (!params[key]) { // Só se não foi capturado pela URL
-                        const match = qrText.match(patterns[key]);
-                        if (match) {
-                            params[key] = match[1];
+                    await this.html5QrCode.start(
+                        { facingMode: "environment" },
+                        {
+                            fps: 10,
+                            qrbox: { width: 250, height: 250 }
+                        },
+                        (qrCodeMessage) => {
+                            this.processQRCode(qrCodeMessage);
+                        },
+                        (errorMessage) => {
+                            // Ignore scan errors
                         }
+                    );
+                    
+                    document.getElementById('start-scan').style.display = 'none';
+                    document.getElementById('stop-scan').style.display = 'inline-block';
+                    
+                } catch (err) {
+                    this.showAlert('Erro ao iniciar scanner: ' + err.message, 'danger');
+                }
+            }
+
+            async stopScanner() {
+                if (this.html5QrCode) {
+                    await this.html5QrCode.stop();
+                    document.getElementById('qr-reader').style.display = 'none';
+                    document.getElementById('start-scan').style.display = 'inline-block';
+                    document.getElementById('stop-scan').style.display = 'none';
+                }
+            }
+
+            async processQRCode(qrData) {
+                try {
+                    await this.stopScanner();
+                    this.showLoading(true);
+                    
+                    // Simular consulta SEFAZ (em produção, faria requisição real)
+                    const noteData = await this.simulateSEFAZQuery(qrData);
+                    
+                    if (noteData) {
+                        this.addNote(noteData);
+                        this.showAlert('Nota fiscal adicionada com sucesso!', 'success');
+                    }
+                    
+                } catch (error) {
+                    this.showAlert('Erro ao processar QR Code: ' + error.message, 'danger');
+                } finally {
+                    this.showLoading(false);
+                }
+            }
+
+            async simulateSEFAZQuery(qrData) {
+                // Simular delay de requisição
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // Extrair dados básicos do QR (formato simplificado)
+                const mockData = {
+                    id: Date.now().toString(),
+                    qrCode: qrData,
+                    estabelecimento: this.generateRandomEstablishment(),
+                    valor: (Math.random() * 500 + 10).toFixed(2),
+                    data: new Date().toISOString().split('T')[0],
+                    hora: new Date().toLocaleTimeString('pt-BR'),
+                    categoria: this.categorizeAutomatically(),
+                    cnpj: this.generateRandomCNPJ(),
+                    numeroNota: Math.floor(Math.random() * 999999) + 100000,
+                    itens: this.generateRandomItems()
+                };
+
+                return mockData;
+            }
+
+            generateRandomEstablishment() {
+                const establishments = [
+                    'Supermercado Bom Preço',
+                    'Posto Shell',
+                    'McDonald\'s',
+                    'Farmácia Drogasil',
+                    'Livraria Cultura',
+                    'C&A',
+                    'Magazine Luiza',
+                    'Restaurante Sabor Caseiro'
+                ];
+                return establishments[Math.floor(Math.random() * establishments.length)];
+            }
+
+            generateRandomCNPJ() {
+                return '12.345.678/0001-90';
+            }
+
+            generateRandomItems() {
+                const items = [
+                    { nome: 'Produto A', quantidade: 1, valor: '25.50' },
+                    { nome: 'Produto B', quantidade: 2, valor: '15.00' },
+                    { nome: 'Produto C', quantidade: 1, valor: '8.90' }
+                ];
+                return items.slice(0, Math.floor(Math.random() * 3) + 1);
+            }
+
+            categorizeAutomatically() {
+                const categories = Object.keys(this.categories);
+                return categories[Math.floor(Math.random() * categories.length)];
+            }
+
+            addNote(noteData) {
+                this.notes.unshift(noteData);
+                this.saveNotes();
+                this.updateDashboard();
+                this.renderNotesList();
+            }
+
+            deleteNote(noteId) {
+                this.notes = this.notes.filter(note => note.id !== noteId);
+                this.saveNotes();
+                this.updateDashboard();
+                this.renderNotesList();
+                this.showAlert('Nota fiscal removida!', 'success');
+            }
+
+            saveNotes() {
+                localStorage.setItem('nf-notes', JSON.stringify(this.notes));
+            }
+
+            updateDashboard() {
+                const currentMonth = new Date().getMonth();
+                const currentYear = new Date().getFullYear();
+                
+                const monthlyNotes = this.notes.filter(note => {
+                    const noteDate = new Date(note.data);
+                    return noteDate.getMonth() === currentMonth && noteDate.getFullYear() === currentYear;
+                });
+
+                const totalMonth = monthlyNotes.reduce((sum, note) => sum + parseFloat(note.valor), 0);
+                
+                document.getElementById('total-month').textContent = `R$ ${totalMonth.toFixed(2).replace('.', ',')}`;
+                document.getElementById('total-notes').textContent = monthlyNotes.length;
+
+                this.updateCategorySummary(monthlyNotes);
+                this.updateChart(monthlyNotes);
+            }
+
+            updateCategorySummary(notes) {
+                const categoryTotals = {};
+                
+                Object.keys(this.categories).forEach(cat => {
+                    categoryTotals[cat] = 0;
+                });
+
+                notes.forEach(note => {
+                    categoryTotals[note.categoria] += parseFloat(note.valor);
+                });
+
+                const summaryContainer = document.getElementById('categories-summary');
+                summaryContainer.innerHTML = '';
+
+                Object.entries(categoryTotals).forEach(([category, total]) => {
+                    if (total > 0) {
+                        const categoryDiv = document.createElement('div');
+                        categoryDiv.className = 'category-item';
+                        categoryDiv.innerHTML = `
+                            <div class="category-value">R$ ${total.toFixed(2).replace('.', ',')}</div>
+                            <div>${this.categories[category].name}</div>
+                        `;
+                        summaryContainer.appendChild(categoryDiv);
                     }
                 });
-                
-                // Formatar data se necessário
-                if (params.dhEmi && params.dhEmi.length === 14) {
-                    // Formato: AAAAMMDDHHMMSS -> AAAA-MM-DDTHH:MM:SS
-                    params.dhEmi = params.dhEmi.replace(/(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6');
-                }
-                
-            } catch (error) {
-                console.warn('Erro ao extrair parâmetros:', error);
             }
-            
-            return params;
-        }
 
-        // Formatar CNPJ
-        function formatarCNPJ(cnpj) {
-            if (!cnpj || cnpj.length !== 14) return cnpj;
-            return cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
-        }
+            updateChart(notes) {
+                const categoryTotals = {};
+                
+                notes.forEach(note => {
+                    if (!categoryTotals[note.categoria]) {
+                        categoryTotals[note.categoria] = 0;
+                    }
+                    categoryTotals[note.categoria] += parseFloat(note.valor);
+                });
 
-        // Gerar nome do estabelecimento baseado no CNPJ
-        function gerarNomeEstabelecimento(cnpj) {
-            const tipos = [
-                'COMERCIO', 'SUPERMERCADO', 'FARMACIA', 'POSTO', 'LANCHONETE', 
-                'PADARIA', 'MERCADO', 'MAGAZINE', 'MATERIAIS', 'RESTAURANTE'
-            ];
-            
-            const nomes = [
-                'BRASIL', 'POPULAR', 'CENTRAL', 'EXPRESS', 'PRIME', 'MASTER',
-                'LOCAL', 'REGIONAL', 'NACIONAL', 'COMERCIAL'
-            ];
-            
-            const tipo = tipos[Math.floor(Math.random() * tipos.length)];
-            const nome = nomes[Math.floor(Math.random() * nomes.length)];
-            
-            return `${tipo} ${nome} LTDA`;
-        }
+                const ctx = document.getElementById('categoryChart').getContext('2d');
+                
+                if (this.chart) {
+                    this.chart.destroy();
+                }
 
-        // Buscar dados na SEFAZ brasileiro
-        async function buscarDadosSEFAZBrasil(qrText, params) {
-            try {
-                // URLs de consulta das SEFAZ estaduais
-                const urlsConsulta = [
-                    qrText, // URL original
-                    qrText.replace('/qrcode', '/consultaqr'), // Variação comum
-                ];
+                const labels = Object.keys(categoryTotals).map(cat => this.categories[cat].name);
+                const data = Object.values(categoryTotals);
+                const colors = Object.keys(categoryTotals).map(cat => this.categories[cat].color);
 
-                for (const url of urlsConsulta) {
-                    try {
-                        const response = await fetch(url, {
-                            method: 'GET',
-                            headers: {
-                                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15',
-                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                            },
-                            timeout: 8000
-                        });
-
-                        if (response.ok) {
-                            const html = await response.text();
-                            const dados = extrairDadosHTMLBrasil(html, params);
-                            if (dados && dados.emit_nome) {
-                                return dados;
+                this.chart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: data,
+                            backgroundColor: colors,
+                            borderWidth: 2,
+                            borderColor: '#ffffff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
                             }
                         }
-                    } catch (error) {
-                        console.warn(`Erro ao consultar ${url}:`, error);
-                        continue;
                     }
-                }
-
-                // Fallback: simular dados baseados nos parâmetros
-                return simularDadosCompletos(params);
-
-            } catch (error) {
-                console.error('Erro ao buscar SEFAZ:', error);
-                return simularDadosCompletos(params);
-            }
-        }
-
-        // Extrair dados do HTML brasileiro
-        function extrairDadosHTMLBrasil(html, params) {
-            try {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
-                
-                // Padrões de busca específicos do Brasil
-                const dados = {
-                    emit_nome: extrairTextoHTMLBrasil(doc, [
-                        'razão social', 'razao social', 'nome fantasia', 'estabelecimento',
-                        'emitente', 'empresa', 'cnpj'
-                    ]) || gerarNomeEstabelecimento(),
-                    
-                    emit_cnpj: extrairTextoHTMLBrasil(doc, ['cnpj']) || params.cnpj || '',
-                    
-                    emit_endereco: extrairTextoHTMLBrasil(doc, [
-                        'endereço', 'endereco', 'logradouro', 'rua', 'avenida'
-                    ]) || '',
-                    
-                    vNF: params.vNF || extrairTextoHTMLBrasil(doc, [
-                        'valor total', 'total da nota', 'valor da nf'
-                    ]) || '0',
-                    
-                    dhEmi: params.dhEmi || '',
-                    numero: extrairTextoHTMLBrasil(doc, ['número', 'numero', 'nf']) || '',
-                    serie: extrairTextoHTMLBrasil(doc, ['série', 'serie']) || '1',
-                    produtos: extrairProdutosBrasil(doc, params.vNF)
-                };
-
-                return dados;
-            } catch (error) {
-                console.error('Erro ao extrair HTML:', error);
-                return simularDadosCompletos(params);
-            }
-        }
-
-        // Extrair texto específico do HTML brasileiro
-        function extrairTextoHTMLBrasil(doc, termos) {
-            for (const termo of termos) {
-                // Buscar em elementos com texto
-                const elementos = Array.from(doc.querySelectorAll('*'));
-                for (const el of elementos) {
-                    const texto = el.textContent?.toLowerCase() || '';
-                    if (texto.includes(termo)) {
-                        // Buscar valor no próximo elemento ou no mesmo
-                        const proximo = el.nextElementSibling || el.parentElement?.nextElementSibling;
-                        if (proximo?.textContent?.trim()) {
-                            return proximo.textContent.trim();
-                        }
-                        
-                        // Buscar na mesma linha
-                        const textoCompleto = el.textContent;
-                        const regex = new RegExp(termo + '\\s*:?\\s*([^\\n\\r]+)', 'i');
-                        const match = textoCompleto.match(regex);
-                        if (match) {
-                            return match[1].trim();
-                        }
-                    }
-                }
-            }
-            return null;
-        }
-
-        // Extrair produtos específicos do Brasil
-        function extrairProdutosBrasil(doc, valorTotal) {
-            const produtos = [];
-            
-            // Buscar tabelas de produtos
-            const tabelas = doc.querySelectorAll('table');
-            for (const tabela of tabelas) {
-                const linhas = tabela.querySelectorAll('tr');
-                for (const linha of linhas) {
-                    const celulas = linha.querySelectorAll('td');
-                    if (celulas.length >= 3) {
-                        const textos = Array.from(celulas).map(c => c.textContent.trim());
-                        // Verificar se parece um produto (tem descrição e valor)
-                        if (textos.some(t => /\d+[.,]\d+/.test(t)) && 
-                            textos.some(t => t.length > 3 && !/total|subtotal/i.test(t))) {
-                            produtos.push({
-                                nome: textos[0] || 'PRODUTO',
-                                qtd: '1,000',
-                                valor: (parseFloat(valorTotal) / 2 || 25.90).toFixed(2)
-                            });
-                        }
-                    }
-                }
-            }
-            
-            // Se não encontrou produtos, criar um baseado no valor
-            if (produtos.length === 0) {
-                produtos.push({
-                    nome: 'ITEM DA COMPRA',
-                    qtd: '1,000',
-                    valor: (parseFloat(valorTotal) || 25.90).toFixed(2)
                 });
             }
-            
-            return produtos;
-        }
 
-        // Mostrar modal classificar
-        function mostrarModalClassificar() {
-            if (!notaAtual) return;
-            
-            // Preencher dados da nota
-            document.getElementById('dadosNota').innerHTML = `
-                <div><strong>Estabelecimento:</strong> ${notaAtual.estabelecimento}</div>
-                <div><strong>Data:</strong> ${formatarData(notaAtual.data)}</div>
-                <div><strong>Valor:</strong> ${formatarMoeda(notaAtual.valor)}</div>
-            `;
-            
-            // Preencher select de categorias
-            const select = document.getElementById('selectCategoria');
-            select.innerHTML = '<option value="">Selecione uma categoria</option>';
-            
-            Object.keys(categorias).forEach(id => {
-                const option = document.createElement('option');
-                option.value = id;
-                option.textContent = categorias[id].nome;
-                select.appendChild(option);
-            });
-            
-            select.innerHTML += '<option value="nova">+ Nova Categoria</option>';
-            
-            document.getElementById('modalClassificar').classList.add('active');
-        }
-
-        // Salvar nota
-        async function salvarNota(e) {
-            e.preventDefault();
-            
-            const selectCategoria = document.getElementById('selectCategoria');
-            const inputNovaCategoria = document.getElementById('inputNovaCategoria');
-            const loading = document.getElementById('loadingSalvar');
-            
-            let categoriaId = selectCategoria.value;
-            
-            if (!categoriaId) {
-                mostrarToast('Selecione uma categoria', 'error');
-                return;
-            }
-            
-            loading.classList.remove('hidden');
-            
-            // Criar nova categoria se necessário
-            if (categoriaId === 'nova') {
-                const nomeCategoria = inputNovaCategoria.value.trim();
-                if (!nomeCategoria) {
-                    mostrarToast('Digite o nome da nova categoria', 'error');
-                    loading.classList.add('hidden');
+            renderNotesList() {
+                const notesList = document.getElementById('notes-list');
+                
+                if (this.notes.length === 0) {
+                    notesList.innerHTML = `
+                        <p style="text-align: center; color: #666; padding: 20px;">
+                            Nenhuma nota fiscal cadastrada ainda.<br>
+                            Use o scanner acima para começar!
+                        </p>
+                    `;
                     return;
                 }
-                
-                categoriaId = generateId();
-                categorias[categoriaId] = {
-                    id: categoriaId,
-                    nome: nomeCategoria,
-                    totais: {}
-                };
-            }
-            
-            // Adicionar nota
-            const anoMes = notaAtual.data.substring(0, 7).replace('-', '');
-            notaAtual.categoriaId = categoriaId;
-            notaAtual.anoMes = anoMes;
-            
-            notas.push(notaAtual);
-            
-            // Atualizar totais da categoria
-            if (!categorias[categoriaId].totais[anoMes]) {
-                categorias[categoriaId].totais[anoMes] = 0;
-            }
-            categorias[categoriaId].totais[anoMes] += notaAtual.valor;
-            
-            await salvarDados();
-            
-            loading.classList.add('hidden');
-            document.getElementById('modalClassificar').classList.remove('active');
-            
-            atualizarInterface();
-            mostrarToast('Nota salva com sucesso!');
-            
-            // Limpar form
-            document.getElementById('formClassificar').reset();
-            document.getElementById('groupNovaCategoria').classList.add('hidden');
-        }
 
-        // Cancelar classificação
-        function cancelarClassificacao() {
-            document.getElementById('modalClassificar').classList.remove('active');
-            notaAtual = null;
-        }
-
-        // Atualizar interface
-        function atualizarInterface() {
-            atualizarTotais();
-            atualizarListaCategorias();
-        }
-
-        // Atualizar totais
-        function atualizarTotais() {
-            const agora = new Date();
-            const mesAtual = agora.getFullYear().toString() + (agora.getMonth() + 1).toString().padStart(2, '0');
-            
-            let totalGeral = 0;
-            let totalMes = 0;
-            
-            const notasFiltradas = filtrarNotas();
-            
-            notasFiltradas.forEach(nota => {
-                totalGeral += nota.valor;
-                if (nota.anoMes === mesAtual) {
-                    totalMes += nota.valor;
-                }
-            });
-            
-            document.getElementById('totalGeral').textContent = formatarMoeda(totalGeral);
-            document.getElementById('totalMes').textContent = formatarMoeda(totalMes);
-        }
-
-        // Atualizar lista de categorias
-        function atualizarListaCategorias() {
-            const container = document.getElementById('listaCategorias');
-            const notasFiltradas = filtrarNotas();
-            
-            if (notasFiltradas.length === 0) {
-                container.innerHTML = `
-                    <p style="text-align: center; color: var(--gray-500); padding: 2rem;">
-                        Nenhuma nota encontrada para o filtro selecionado.
-                    </p>
-                `;
-                return;
-            }
-            
-            // Agrupar notas por categoria
-            const notasPorCategoria = {};
-            
-            notasFiltradas.forEach(nota => {
-                if (!notasPorCategoria[nota.categoriaId]) {
-                    notasPorCategoria[nota.categoriaId] = [];
-                }
-                notasPorCategoria[nota.categoriaId].push(nota);
-            });
-            
-            let html = '';
-            
-            Object.keys(notasPorCategoria).forEach(categoriaId => {
-                const categoria = categorias[categoriaId];
-                const notasCategoria = notasPorCategoria[categoriaId];
-                const total = notasCategoria.reduce((sum, nota) => sum + nota.valor, 0);
-                
-                html += `
-                    <div class="categoria-item" onclick="mostrarDetalhesCategoria('${categoriaId}')">
-                        <div>
-                            <div style="font-weight: 600; color: var(--gray-800);">${categoria.nome}</div>
-                            <div style="color: var(--gray-500); font-size: 0.875rem;">${notasCategoria.length} nota(s)</div>
+                notesList.innerHTML = this.notes.map(note => `
+                    <div class="note-item" onclick="nfManager.showNoteDetails('${note.id}')">
+                        <div class="note-header">
+                            <span class="note-title">${note.estabelecimento}</span>
+                            <span class="note-value">R$ ${parseFloat(note.valor).toFixed(2).replace('.', ',')}</span>
                         </div>
-                        <div style="text-align: right;">
-                            <div style="font-weight: 700; color: var(--primary); font-size: 1.1rem;">${formatarMoeda(total)}</div>
+                        <div class="note-details">
+                            ${new Date(note.data).toLocaleDateString('pt-BR')} - ${this.categories[note.categoria].name}
                         </div>
                     </div>
-                `;
-            });
-            
-            container.innerHTML = html;
-        }
-
-        // Filtrar notas
-        function filtrarNotas() {
-            const agora = new Date();
-            const mesAtual = agora.getFullYear().toString() + (agora.getMonth() + 1).toString().padStart(2, '0');
-            const mesAnterior = new Date(agora.getFullYear(), agora.getMonth() - 1);
-            const mesAnteriorStr = mesAnterior.getFullYear().toString() + (mesAnterior.getMonth() + 1).toString().padStart(2, '0');
-            const trintaDiasAtras = new Date(agora.getTime() - 30 * 24 * 60 * 60 * 1000);
-            
-            switch (filtroAtivo) {
-                case 'mes-atual':
-                    return notas.filter(nota => nota.anoMes === mesAtual);
-                case '30-dias':
-                    return notas.filter(nota => new Date(nota.data) >= trintaDiasAtras);
-                case 'mes-anterior':
-                    return notas.filter(nota => nota.anoMes === mesAnteriorStr);
-                default:
-                    return notas;
+                `).join('');
             }
-        }
 
-        // Mostrar detalhes da categoria
-        function mostrarDetalhesCategoria(categoriaId) {
-            const categoria = categorias[categoriaId];
-            const notasCategoria = notas.filter(nota => nota.categoriaId === categoriaId);
-            
-            document.getElementById('tituloDetalhes').textContent = categoria.nome;
-            
-            let html = '';
-            
-            notasCategoria.forEach(nota => {
-                html += `
-                    <div class="nota-item">
-                        <div class="nota-info">
-                            <div class="nota-estabelecimento">${nota.estabelecimento}</div>
-                            <div class="nota-data">${formatarData(nota.data)}</div>
-                        </div>
-                        <div style="text-align: right;">
-                            <div class="nota-valor">${formatarMoeda(nota.valor)}</div>
-                            <div class="nota-actions">
-                                <button class="btn btn-danger btn-sm" onclick="excluirNota('${nota.id}')" title="Excluir">
-                                    🗑️
-                                </button>
-                                <button class="btn btn-secondary btn-sm" onclick="compartilharNota('${nota.id}')" title="Compartilhar">
-                                    📤
-                                </button>
-                            </div>
-                        </div>
+            showNoteDetails(noteId) {
+                const note = this.notes.find(n => n.id === noteId);
+                if (!note) return;
+
+                const modal = document.getElementById('note-modal');
+                const detailsContainer = document.getElementById('note-details');
+                
+                detailsContainer.innerHTML = `
+                    <h2>📄 Detalhes da Nota Fiscal</h2>
+                    <div style="margin: 20px 0;">
+                        <p><strong>Estabelecimento:</strong> ${note.estabelecimento}</p>
+                        <p><strong>CNPJ:</strong> ${note.cnpj}</p>
+                        <p><strong>Data:</strong> ${new Date(note.data).toLocaleDateString('pt-BR')}</p>
+                        <p><strong>Hora:</strong> ${note.hora}</p>
+                        <p><strong>Valor Total:</strong> R$ ${parseFloat(note.valor).toFixed(2).replace('.', ',')}</p>
+                        <p><strong>Categoria:</strong> ${this.categories[note.categoria].name}</p>
+                        <p><strong>Número da Nota:</strong> ${note.numeroNota}</p>
+                    </div>
+                    
+                    <h3>🛒 Itens</h3>
+                    <div style="margin: 15px 0;">
+                        ${note.itens.map(item => `
+                            <p>${item.nome} - Qtd: ${item.quantidade} - R$ ${item.valor}</p>
+                        `).join('')}
+                    </div>
+                    
+                    <div style="margin-top: 30px; text-align: center;">
+                        <button class="btn btn-success" onclick="nfManager.shareNote('${note.id}')">
+                            📱 Compartilhar no WhatsApp
+                        </button>
+                        <button class="btn" onclick="nfManager.downloadNotePDF('${note.id}')">
+                            📥 Download PDF
+                        </button>
+                        <button class="btn btn-danger" onclick="nfManager.deleteNote('${note.id}'); document.getElementById('note-modal').style.display='none';">
+                            🗑️ Excluir Nota
+                        </button>
                     </div>
                 `;
-            });
-            
-            if (notasCategoria.length === 0) {
-                html = '<p style="text-align: center; color: var(--gray-500); padding: 2rem;">Nenhuma nota nesta categoria.</p>';
+                
+                modal.style.display = 'block';
             }
-            
-            document.getElementById('listaNotas').innerHTML = html;
-            document.getElementById('modalDetalhes').classList.add('active');
-        }
 
-        // Fechar detalhes
-        function fecharDetalhes() {
-            document.getElementById('modalDetalhes').classList.remove('active');
-        }
+            shareNote(noteId) {
+                const note = this.notes.find(n => n.id === noteId);
+                if (!note) return;
 
-        // Excluir nota
-        async function excluirNota(notaId) {
-            if (!confirm('Tem certeza que deseja excluir esta nota?')) {
-                return;
+                const message = `📄 *Nota Fiscal*\n\n` +
+                              `🏪 ${note.estabelecimento}\n` +
+                              `💰 R$ ${parseFloat(note.valor).toFixed(2).replace('.', ',')}\n` +
+                              `📅 ${new Date(note.data).toLocaleDateString('pt-BR')}\n` +
+                              `🏷️ ${this.categories[note.categoria].name}`;
+
+                const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+                window.open(whatsappUrl, '_blank');
             }
-            
-            const nota = notas.find(n => n.id === notaId);
-            if (!nota) return;
-            
-            // Remover da lista
-            notas = notas.filter(n => n.id !== notaId);
-            
-            // Atualizar totais da categoria
-            const categoria = categorias[nota.categoriaId];
-            if (categoria && categoria.totais[nota.anoMes]) {
-                categoria.totais[nota.anoMes] -= nota.valor;
-                if (categoria.totais[nota.anoMes] <= 0) {
-                    delete categoria.totais[nota.anoMes];
-                }
-            }
-            
-            await salvarDados();
-            atualizarInterface();
-            mostrarDetalhesCategoria(nota.categoriaId); // Atualizar modal
-            mostrarToast('Nota excluída com sucesso!');
-        }
 
-        // Compartilhar nota individual
-        async function compartilharNota(notaId) {
-            const nota = notas.find(n => n.id === notaId);
-            if (!nota) return;
-            
-            const categoria = categorias[nota.categoriaId];
-            
-            const dadosCompartilhamento = {
-                titulo: `Nota Fiscal - ${categoria.nome}`,
-                notas: [nota],
-                total: nota.valor
-            };
-            
-            await gerarECompartilharPDF(dadosCompartilhamento);
-        }
-
-        // Exportar PDF
-        async function exportarPDF() {
-            const notasFiltradas = filtrarNotas();
-            
-            if (notasFiltradas.length === 0) {
-                mostrarToast('Nenhuma nota para exportar', 'error');
-                return;
-            }
-            
-            const total = notasFiltradas.reduce((sum, nota) => sum + nota.valor, 0);
-            
-            const dadosCompartilhamento = {
-                titulo: `Relatório de Notas Fiscais - ${getFiltroTexto()}`,
-                notas: notasFiltradas,
-                total
-            };
-            
-            await gerarECompartilharPDF(dadosCompartilhamento);
-        }
-
-        // Gerar e compartilhar PDF
-        async function gerarECompartilharPDF(dados) {
-            try {
-                // Verificar se jsPDF está disponível
-                if (typeof window.jspdf === 'undefined') {
-                    mostrarToast('Erro: Biblioteca PDF não carregada', 'error');
-                    return;
-                }
+            downloadNotePDF(noteId) {
+                const note = this.notes.find(n => n.id === noteId);
+                if (!note) return;
 
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
-                
-                // Configurações
-                const pageWidth = doc.internal.pageSize.width;
-                const pageHeight = doc.internal.pageSize.height;
-                const margin = 15;
-                let yPosition = margin;
-                
-                // Gerar PDF para cada nota individualmente
-                dados.notas.forEach((nota, index) => {
-                    if (index > 0) {
-                        doc.addPage();
-                        yPosition = margin;
-                    }
-                    
-                    const categoria = categorias[nota.categoriaId];
-                    const dadosCompletos = nota.dadosCompletos;
-                    
-                    // === CABEÇALHO DA NOTA FISCAL ===
-                    doc.setFontSize(14);
-                    doc.setFont('helvetica', 'bold');
-                    doc.text('DOCUMENTO AUXILIAR DA NOTA FISCAL ELETRÔNICA', pageWidth/2, yPosition, { align: 'center' });
-                    yPosition += 8;
-                    
-                    doc.setFontSize(8);
-                    doc.setFont('helvetica', 'normal');
-                    doc.text('NFC-e', pageWidth/2, yPosition, { align: 'center' });
-                    yPosition += 12;
-                    
-                    // === DADOS DO EMITENTE ===
-                    doc.rect(margin, yPosition, pageWidth - 2*margin, 25);
-                    yPosition += 5;
-                    
-                    doc.setFontSize(10);
-                    doc.setFont('helvetica', 'bold');
-                    doc.text(dadosCompletos?.emit_nome || nota.estabelecimento, margin + 3, yPosition);
-                    yPosition += 5;
-                    
-                    doc.setFontSize(8);
-                    doc.setFont('helvetica', 'normal');
-                    if (dadosCompletos?.emit_cnpj) {
-                        doc.text(`CNPJ: ${dadosCompletos.emit_cnpj}`, margin + 3, yPosition);
-                        yPosition += 4;
-                    }
-                    if (dadosCompletos?.emit_endereco) {
-                        doc.text(dadosCompletos.emit_endereco, margin + 3, yPosition);
-                        yPosition += 4;
-                    }
-                    yPosition += 8;
-                    
-                    // === INFORMAÇÕES DA NOTA ===
-                    doc.rect(margin, yPosition, pageWidth - 2*margin, 15);
-                    yPosition += 5;
-                    
-                    doc.setFontSize(8);
-                    doc.setFont('helvetica', 'bold');
-                    doc.text(`Número: ${dadosCompletos?.numero || 'N/A'}`, margin + 3, yPosition);
-                    doc.text(`Série: ${dadosCompletos?.serie || '1'}`, margin + 50, yPosition);
-                    doc.text(`Emissão: ${formatarDataCompleta(nota.data)}`, margin + 80, yPosition);
-                    yPosition += 4;
-                    
-                    doc.setFont('helvetica', 'normal');
-                    if (nota.chave) {
-                        doc.text(`Chave de Acesso: ${nota.chave}`, margin + 3, yPosition);
-                    }
-                    yPosition += 12;
-                    
-                    // === PRODUTOS/SERVIÇOS ===
-                    doc.setFontSize(9);
-                    doc.setFont('helvetica', 'bold');
-                    doc.text('PRODUTOS/SERVIÇOS', margin + 3, yPosition);
-                    yPosition += 5;
-                    
-                    // Cabeçalho da tabela de produtos
-                    doc.rect(margin, yPosition, pageWidth - 2*margin, 8);
-                    doc.setFontSize(7);
-                    doc.text('CÓDIGO', margin + 2, yPosition + 5);
-                    doc.text('DESCRIÇÃO', margin + 25, yPosition + 5);
-                    doc.text('QTD', margin + 90, yPosition + 5);
-                    doc.text('VL UNIT', margin + 110, yPosition + 5);
-                    doc.text('VL TOTAL', margin + 135, yPosition + 5);
-                    yPosition += 8;
-                    
-                    // Produtos
-                    const produtos = dadosCompletos?.produtos || [
-                        { nome: 'ITEM DA COMPRA', qtd: '1,000', valor: nota.valor.toFixed(2) }
-                    ];
-                    
-                    produtos.forEach((produto, i) => {
-                        if (yPosition > pageHeight - 40) {
-                            doc.addPage();
-                            yPosition = margin + 20;
-                        }
-                        
-                        doc.rect(margin, yPosition, pageWidth - 2*margin, 6);
-                        doc.setFont('helvetica', 'normal');
-                        doc.text((i + 1).toString().padStart(3, '0'), margin + 2, yPosition + 4);
-                        doc.text(produto.nome.substring(0, 25), margin + 25, yPosition + 4);
-                        doc.text(produto.qtd || '1,000', margin + 90, yPosition + 4);
-                        doc.text(`R$ ${produto.valor}`, margin + 110, yPosition + 4);
-                        doc.text(`R$ ${produto.valor}`, margin + 135, yPosition + 4);
-                        yPosition += 6;
-                    });
-                    
-                    yPosition += 5;
-                    
-                    // === TOTAIS ===
-                    doc.rect(margin, yPosition, pageWidth - 2*margin, 20);
-                    yPosition += 5;
-                    
-                    doc.setFontSize(8);
-                    doc.setFont('helvetica', 'normal');
-                    doc.text('QTD. TOTAL DE ITENS:', margin + 3, yPosition);
-                    doc.text(produtos.length.toString(), margin + 50, yPosition);
-                    yPosition += 4;
-                    
-                    doc.text('DESCONTO:', margin + 3, yPosition);
-                    doc.text('R$ 0,00', margin + 50, yPosition);
-                    yPosition += 4;
-                    
-                    doc.setFont('helvetica', 'bold');
-                    doc.setFontSize(10);
-                    doc.text('VALOR TOTAL:', margin + 3, yPosition);
-                    doc.text(formatarMoeda(nota.valor), margin + 50, yPosition);
-                    yPosition += 8;
-                    
-                    // === INFORMAÇÕES FISCAIS ===
-                    yPosition += 5;
-                    doc.rect(margin, yPosition, pageWidth - 2*margin, 15);
-                    yPosition += 5;
-                    
-                    doc.setFontSize(7);
-                    doc.setFont('helvetica', 'normal');
-                    doc.text('INFORMAÇÃO DOS TRIBUTOS TOTAIS INCIDENTES', margin + 3, yPosition);
-                    yPosition += 3;
-                    doc.text('(CONF. LEI FED. 12.741/2012)', margin + 3, yPosition);
-                    yPosition += 8;
-                    
-                    // === QR CODE SIMULADO ===
-                    yPosition += 5;
-                    doc.setFontSize(8);
-                    doc.setFont('helvetica', 'bold');
-                    doc.text('CONSULTE PELA CHAVE DE ACESSO:', margin + 3, yPosition);
-                    yPosition += 4;
-                    doc.setFont('helvetica', 'normal');
-                    doc.setFontSize(6);
-                    if (nota.chave) {
-                        // Quebrar a chave em linhas
-                        const chaveQuebrada = nota.chave.match(/.{1,22}/g);
-                        chaveQuebrada?.forEach(linha => {
-                            doc.text(linha, margin + 3, yPosition);
-                            yPosition += 3;
-                        });
-                    }
-                    
-                    yPosition += 5;
-                    doc.rect(margin + 60, yPosition - 15, 30, 15);
-                    doc.setFontSize(6);
-                    doc.text('QR CODE', margin + 70, yPosition - 8);
-                    
-                    // === RODAPÉ ===
-                    yPosition = pageHeight - 20;
-                    doc.setFontSize(6);
-                    doc.setFont('helvetica', 'normal');
-                    doc.text(`Categoria: ${categoria.nome}`, margin, yPosition);
-                    doc.text(`Gerado em: ${formatarDataCompleta(new Date().toISOString().split('T')[0])}`, pageWidth - margin - 40, yPosition);
-                });
-                
-                // Gerar blob do PDF
-                const pdfBlob = doc.output('blob');
-                const pdfUrl = URL.createObjectURL(pdfBlob);
-                
-                // Tentar compartilhar via Web Share API primeiro
-                if (navigator.share) {
-                    try {
-                        const file = new File([pdfBlob], 'nota-fiscal.pdf', { type: 'application/pdf' });
-                        
-                        await navigator.share({
-                            title: 'Nota Fiscal',
-                            text: `Nota Fiscal - ${dados.titulo}`,
-                            files: [file]
-                        });
-                        
-                        URL.revokeObjectURL(pdfUrl);
-                        mostrarToast('PDF compartilhado com sucesso!');
-                        return;
-                    } catch (shareError) {
-                        console.log('Compartilhamento cancelado ou não suportado:', shareError);
-                    }
-                }
-                
-                // Fallback: mostrar opções
-                const textoWhatsApp = encodeURIComponent(`📄 *Nota Fiscal*\n\n${dados.notas[0].estabelecimento}\nValor: ${formatarMoeda(dados.total)}\nData: ${formatarDataCompleta(dados.notas[0].data)}\n\nDocumento em anexo.`);
-                
-                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-                
-                if (isMobile) {
-                    mostrarOpcoesCompartilhamento(pdfUrl, textoWhatsApp, 'Nota Fiscal');
-                } else {
-                    const a = document.createElement('a');
-                    a.href = pdfUrl;
-                    a.download = 'nota-fiscal.pdf';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(pdfUrl);
-                    mostrarToast('PDF baixado com sucesso!');
-                }
-                
-            } catch (error) {
-                console.error('Erro ao gerar PDF:', error);
-                mostrarToast('Erro ao gerar PDF: ' + error.message, 'error');
-            }
-        }
 
-        // Formatar data completa
-        function formatarDataCompleta(data) {
-            const date = new Date(data + 'T00:00:00');
-            return date.toLocaleDateString('pt-BR', {
-                day: '2-digit',
-                month: '2-digit', 
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-        }ório
-                doc.setFontSize(10);
-                doc.setFont('helvetica', 'normal');
-                doc.text(`Gerado em: ${formatarData(new Date().toISOString().split('T')[0])}`, margin, yPosition);
-                yPosition += 15;
+                doc.setFontSize(20);
+                doc.text('Nota Fiscal', 20, 30);
                 
-                // Cabeçalho da tabela
-                doc.setFontSize(10);
-                doc.setFont('helvetica', 'bold');
-                doc.text('Data', margin, yPosition);
-                doc.text('Estabelecimento', margin + 25, yPosition);
-                doc.text('Categoria', margin + 85, yPosition);
-                doc.text('Valor', margin + 120, yPosition);
-                yPosition += 8;
-                
-                // Linha separadora
-                doc.line(margin, yPosition, pageWidth - margin, yPosition);
-                yPosition += 8;
-                
-                // Dados das notas
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(9);
-                
-                dados.notas.forEach(nota => {
-                    const categoria = categorias[nota.categoriaId];
-                    
-                    // Verificar se precisa de nova página
-                    if (yPosition > 250) {
-                        doc.addPage();
-                        yPosition = margin;
-                    }
-                    
-                    doc.text(formatarData(nota.data), margin, yPosition);
-                    doc.text(truncarTexto(nota.estabelecimento, 20), margin + 25, yPosition);
-                    doc.text(truncarTexto(categoria.nome, 12), margin + 85, yPosition);
-                    doc.text(formatarMoeda(nota.valor), margin + 120, yPosition);
-                    yPosition += 6;
-                });
-                
-                // Total
-                yPosition += 5;
-                doc.line(margin, yPosition, pageWidth - margin, yPosition);
-                yPosition += 8;
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(11);
-                doc.text(`Total: ${formatarMoeda(dados.total)}`, margin + 85, yPosition);
-                
-                // Gerar blob do PDF
-                const pdfBlob = doc.output('blob');
-                const pdfUrl = URL.createObjectURL(pdfBlob);
-                
-                // Tentar compartilhar via Web Share API primeiro
-                if (navigator.share) {
-                    try {
-                        const file = new File([pdfBlob], 'notas-fiscais.pdf', { type: 'application/pdf' });
-                        
-                        await navigator.share({
-                            title: 'Notas Fiscais',
-                            text: dados.titulo,
-                            files: [file]
-                        });
-                        
-                        URL.revokeObjectURL(pdfUrl);
-                        mostrarToast('PDF compartilhado com sucesso!');
-                        return;
-                    } catch (shareError) {
-                        console.log('Compartilhamento cancelado ou não suportado:', shareError);
-                    }
-                }
-                
-                // Fallback 1: Tentar abrir WhatsApp com texto
-                const textoWhatsApp = encodeURIComponent(`📊 *Relatório de Notas Fiscais*\n\n${dados.titulo}\n\nTotal: ${formatarMoeda(dados.total)}\nQuantidade: ${dados.notas.length} nota(s)\n\nGerado em: ${formatarData(new Date().toISOString().split('T')[0])}`);
-                
-                // Detectar se é mobile
-                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-                
-                if (isMobile) {
-                    // No mobile, mostrar opções
-                    mostrarOpcoesCompartilhamento(pdfUrl, textoWhatsApp, dados.titulo);
-                } else {
-                    // No desktop, fazer download direto
-                    const a = document.createElement('a');
-                    a.href = pdfUrl;
-                    a.download = 'notas-fiscais.pdf';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(pdfUrl);
-                    mostrarToast('PDF baixado com sucesso!');
-                }
-                
-            } catch (error) {
-                console.error('Erro ao gerar PDF:', error);
-                mostrarToast('Erro ao gerar PDF: ' + error.message, 'error');
-            }
-        }
+                doc.setFontSize(12);
+                doc.text(`Estabelecimento: ${note.estabelecimento}`, 20, 50);
+                doc.text(`CNPJ: ${note.cnpj}`, 20, 60);
+                doc.text(`Data: ${new Date(note.data).toLocaleDateString('pt-BR')}`, 20, 70);
+                doc.text(`Hora: ${note.hora}`, 20, 80);
+                doc.text(`Valor Total: R$ ${parseFloat(note.valor).toFixed(2).replace('.', ',')}`, 20, 90);
+                doc.text(`Categoria: ${this.categories[note.categoria].name}`, 20, 100);
+                doc.text(`Número da Nota: ${note.numeroNota}`, 20, 110);
 
-        // Mostrar opções de compartilhamento
-        function mostrarOpcoesCompartilhamento(pdfUrl, textoWhatsApp, titulo) {
-            const modal = document.createElement('div');
-            modal.className = 'modal active';
-            modal.innerHTML = `
-                <div class="modal-content">
-                    <h3>Compartilhar Relatório</h3>
-                    <div style="display: flex; flex-direction: column; gap: 1rem; margin: 1rem 0;">
-                        <button class="btn btn-success" onclick="abrirWhatsApp('${textoWhatsApp}')" style="background: #25D366;">
-                            📱 Enviar por WhatsApp
-                        </button>
-                        <button class="btn btn-primary" onclick="baixarPDF('${pdfUrl}')">
-                            📄 Baixar PDF
-                        </button>
-                        <button class="btn btn-secondary" onclick="fecharModalCompartilhamento()">
-                            Cancelar
-                        </button>
+                doc.text('Itens:', 20, 130);
+                let yPos = 140;
+                note.itens.forEach(item => {
+                    doc.text(`${item.nome} - Qtd: ${item.quantidade} - R$ ${item.valor}`, 20, yPos);
+                    yPos += 10;
+                });
+
+                doc.save(`nota-fiscal-${note.numeroNota}.pdf`);
+            }
+
+            showAlert(message, type) {
+                const alertContainer = document.getElementById('alert-container');
+                alertContainer.innerHTML = `
+                    <div class="alert alert-${type}">
+                        ${message}
                     </div>
-                </div>
-            `;
-            
-            document.body.appendChild(modal);
-            
-            // Funções globais temporárias
-            window.abrirWhatsApp = function(texto) {
-                window.open(`https://wa.me/?text=${texto}`, '_blank');
-                fecharModalCompartilhamento();
-            };
-            
-            window.baixarPDF = function(url) {
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'notas-fiscais.pdf';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                fecharModalCompartilhamento();
-                mostrarToast('PDF baixado!');
-            };
-            
-            window.fecharModalCompartilhamento = function() {
-                document.body.removeChild(modal);
-                delete window.abrirWhatsApp;
-                delete window.baixarPDF;
-                delete window.fecharModalCompartilhamento;
-            };
-        }
-
-        // Funções utilitárias
-        function generateId() {
-            return Date.now().toString(36) + Math.random().toString(36).substr(2);
-        }
-
-        function formatarMoeda(valor) {
-            return new Intl.NumberFormat('pt-BR', {
-                style: 'currency',
-                currency: 'BRL'
-            }).format(valor);
-        }
-
-        function formatarData(data) {
-            return new Date(data + 'T00:00:00').toLocaleDateString('pt-BR');
-        }
-
-        function truncarTexto(texto, limite) {
-            return texto.length > limite ? texto.substring(0, limite) + '...' : texto;
-        }
-
-        function getFiltroTexto() {
-            switch (filtroAtivo) {
-                case 'mes-atual': return 'Mês Atual';
-                case '30-dias': return 'Últimos 30 Dias';
-                case 'mes-anterior': return 'Mês Anterior';
-                default: return 'Todos os Períodos';
-            }
-        }
-
-        function mostrarToast(mensagem, tipo = 'success') {
-            const toast = document.getElementById('toast');
-            const message = document.getElementById('toastMessage');
-            
-            message.textContent = mensagem;
-            
-            if (tipo === 'error') {
-                toast.style.background = 'var(--danger)';
-            } else if (tipo === 'info') {
-                toast.style.background = 'var(--primary)';
-            } else if (tipo === 'warning') {
-                toast.style.background = 'var(--warning)';
-            } else {
-                toast.style.background = 'var(--success)';
-            }
-            
-            toast.classList.add('show');
-            
-            setTimeout(() => {
-                toast.classList.remove('show');
-            }, 4000);
-        }
-
-        // Adicionar botão para teste manual
-        function adicionarBotaoTeste() {
-            const testButton = document.createElement('button');
-            testButton.textContent = '🧪 Teste QR';
-            testButton.className = 'btn btn-secondary btn-sm';
-            testButton.style.position = 'fixed';
-            testButton.style.top = '1rem';
-            testButton.style.right = '1rem';
-            testButton.style.zIndex = '1000';
-            testButton.onclick = async function() {
-                // Simular QR Code de nota fiscal real com dados completos
-                const qrTeste = "https://www.fazenda.sp.gov.br/nfce/qrcode?chNFe=35200114200166000187650010000000047000000047&nVersao=100&tpAmb=1&dhEmi=2025-06-01T14:30:00&vNF=123.45&vICMS=10.50&digVal=abcd1234&cIdToken=123456";
+                `;
                 
-                mostrarToast('Processando QR Code de teste...', 'info');
-                await onScanSuccess(qrTeste);
-            };
-            document.body.appendChild(testButton);
+                setTimeout(() => {
+                    alertContainer.innerHTML = '';
+                }, 5000);
+            }
+
+            showLoading(show) {
+                const loading = document.getElementById('loading');
+                loading.style.display = show ? 'block' : 'none';
+            }
         }
 
-        // Simular dados de teste mais realistas
-        async function adicionarDadosTeste() {
-            if (notas.length > 0) return;
-            
-            const categoriasIniciais = {
-                'mercado': { id: 'mercado', nome: 'Mercado', totais: {} },
-                'farmacia': { id: 'farmacia', nome: 'Farmácia', totais: {} },
-                'combustivel': { id: 'combustivel', nome: 'Combustível', totais: {} }
-            };
-            
-            const notasIniciais = [
-                {
-                    id: generateId(),
-                    estabelecimento: 'SUPERMERCADO BRASIL LTDA',
-                    valor: 150.75,
-                    data: '2025-06-01',
-                    categoriaId: 'mercado',
-                    anoMes: '202506',
-                    qrCode: 'teste1',
-                    chave: '35250614200166000187650010000000047000000047',
-                    dadosCompletos: {
-                        emit_nome: 'SUPERMERCADO BRASIL LTDA',
-                        emit_cnpj: '14.200.166/0001-87',
-                        emit_endereco: 'RUA DO COMERCIO, 123 - CENTRO - SAO PAULO/SP',
-                        vNF: '150.75',
-                        dhEmi: '2025-06-01T10:30:00',
-                        numero: '000047',
-                        serie: '1',
-                        produtos: [
-                            { nome: 'ARROZ TIPO 1 5KG', qtd: '2,000', valor: '24.90' },
-                            { nome: 'FEIJAO PRETO 1KG', qtd: '3,000', valor: '15.50' },
-                            { nome: 'OLEO DE SOJA 900ML', qtd: '1,000', valor: '8.75' },
-                            { nome: 'LEITE INTEGRAL 1L', qtd: '4,000', valor: '18.60' }
-                        ]
-                    }
-                },
-                {
-                    id: generateId(),
-                    estabelecimento: 'FARMACIA POPULAR LTDA',
-                    valor: 45.90,
-                    data: '2025-05-30',
-                    categoriaId: 'farmacia',
-                    anoMes: '202505',
-                    qrCode: 'teste2',
-                    chave: '35250598765432000143650010000000048000000048',
-                    dadosCompletos: {
-                        emit_nome: 'FARMACIA POPULAR LTDA',
-                        emit_cnpj: '98.765.432/0001-43',
-                        emit_endereco: 'AV PRINCIPAL, 456 - CENTRO - SAO PAULO/SP',
-                        vNF: '45.90',
-                        dhEmi: '2025-05-30T16:45:00',
-                        numero: '000048',
-                        serie: '1',
-                        produtos: [
-                            { nome: 'DIPIRONA 500MG 20CP', qtd: '1,000', valor: '12.50' },
-                            { nome: 'VITAMINA C 1G 30CP', qtd: '1,000', valor: '18.90' },
-                            { nome: 'PROTETOR SOLAR FPS60', qtd: '1,000', valor: '14.50' }
-                        ]
-                    }
-                }
-            ];
-            
-            // Calcular totais
-            notasIniciais.forEach(nota => {
-                if (!categoriasIniciais[nota.categoriaId].totais[nota.anoMes]) {
-                    categoriasIniciais[nota.categoriaId].totais[nota.anoMes] = 0;
-                }
-                categoriasIniciais[nota.categoriaId].totais[nota.anoMes] += nota.valor;
-            });
-            
-            categorias = categoriasIniciais;
-            notas = notasIniciais;
-            
-            await salvarDados();
-            atualizarInterface();
-        }
-
-        // Suporte para PWA
-        let deferredPrompt;
+        // Inicializar o app
+        let nfManager;
         
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
+        document.addEventListener('DOMContentLoaded', function() {
+            nfManager = new NFManager();
             
-            // Mostrar botão de instalação (opcional)
-            console.log('App pode ser instalado');
-        });
-
-        window.addEventListener('appinstalled', () => {
-            console.log('App instalado');
-            deferredPrompt = null;
-        });
-
-        // Suporte offline básico
-        window.addEventListener('online', () => {
-            mostrarToast('Conexão restaurada');
-        });
-
-        window.addEventListener('offline', () => {
-            mostrarToast('Modo offline ativado', 'warning');
+            // Adicionar algumas notas de exemplo para demonstração
+            if (nfManager.notes.length === 0) {
+                const exampleNotes = [
+                    {
+                        id: '1',
+                        estabelecimento: 'Supermercado Central',
+                        valor: '85.50',
+                        data: new Date().toISOString().split('T')[0],
+                        hora: '14:30:00',
+                        categoria: 'alimentacao',
+                        cnpj: '12.345.678/0001-90',
+                        numeroNota: 123456,
+                        itens: [
+                            { nome: 'Arroz 5kg', quantidade: 1, valor: '25.50' },
+                            { nome: 'Feijão 1kg', quantidade: 2, valor: '15.00' },
+                            { nome: 'Óleo de soja', quantidade: 1, valor: '8.90' }
+                        ]
+                    },
+                    {
+                        id: '2',
+                        estabelecimento: 'Posto Ipiranga',
+                        valor: '120.00',
+                        data: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+                        hora: '09:15:00',
+                        categoria: 'transporte',
+                        cnpj: '98.765.432/0001-10',
+                        numeroNota: 654321,
+                        itens: [
+                            { nome: 'Gasolina Comum', quantidade: 25, valor: '120.00' }
+                        ]
+                    }
+                ];
+                
+                nfManager.notes = exampleNotes;
+                nfManager.saveNotes();
+                nfManager.updateDashboard();
+                nfManager.renderNotesList();
+            }
         });
     </script>
 </body>
