@@ -256,9 +256,87 @@
             border-color: #f5c6cb;
         }
 
-        .hidden {
-            display: none;
+        .alert-info {
+            color: #1565c0;
+            background-color: #e3f2fd;
+            border-color: #90caf9;
         }
+
+        .scanner-feedback {
+            text-align: center;
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(255,255,255,0.9);
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .scan-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff6b6b;
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-indicator.scanning {
+            background: #ffd93d;
+        }
+
+        .status-indicator.ready {
+            background: #6bcf7f;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        #qr-reader {
+            border: 3px solid #667eea;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #qr-reader video {
+            border-radius: 12px;
+        }
+
+        .scan-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 200px;
+            height: 200px;
+            border: 2px dashed #667eea;
+            border-radius: 15px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .scan-corners {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #667eea;
+        }
+
+        .scan-corners.top-left { top: 10px; left: 10px; border-right: none; border-bottom: none; }
+        .scan-corners.top-right { top: 10px; right: 10px; border-left: none; border-bottom: none; }
+        .scan-corners.bottom-left { bottom: 10px; left: 10px; border-right: none; border-top: none; }
+        .scan-corners.bottom-right { bottom: 10px; right: 10px; border-left: none; border-top: none; }
 
         @media (max-width: 768px) {
             .dashboard {
@@ -287,9 +365,21 @@
             <div class="card">
                 <h3>📷 Scanner QR Code</h3>
                 <div class="scanner-area">
-                    <div id="qr-reader" style="display: none;"></div>
-                    <button id="start-scan" class="btn">Iniciar Scanner</button>
-                    <button id="stop-scan" class="btn btn-danger" style="display: none;">Parar Scanner</button>
+                    <div id="qr-reader" style="display: none;">
+                        <div class="scan-overlay">
+                            <div class="scan-corners top-left"></div>
+                            <div class="scan-corners top-right"></div>
+                            <div class="scan-corners bottom-left"></div>
+                            <div class="scan-corners bottom-right"></div>
+                        </div>
+                    </div>
+                    <button id="start-scan" class="btn">📷 Iniciar Scanner</button>
+                    <button id="stop-scan" class="btn btn-danger" style="display: none;">⏹️ Parar Scanner</button>
+                    
+                    <div class="scan-status" id="scan-status" style="display: none;">
+                        <div class="status-indicator" id="status-indicator"></div>
+                        <span id="status-text">Preparando câmera...</span>
+                    </div>
                 </div>
                 
                 <div class="loading" id="loading">
@@ -394,39 +484,173 @@
 
             async startScanner() {
                 try {
+                    console.log('🚀 Iniciando scanner otimizado...');
+                    
                     const qrReader = document.getElementById('qr-reader');
+                    const scanStatus = document.getElementById('scan-status');
+                    const statusIndicator = document.getElementById('status-indicator');
+                    const statusText = document.getElementById('status-text');
+                    
+                    // Mostrar status
                     qrReader.style.display = 'block';
+                    scanStatus.style.display = 'flex';
+                    statusText.textContent = 'Preparando câmera...';
+                    statusIndicator.className = 'status-indicator';
                     
                     this.html5QrCode = new Html5Qrcode("qr-reader");
                     
-                    await this.html5QrCode.start(
-                        { facingMode: "environment" },
-                        {
-                            fps: 10,
-                            qrbox: { width: 250, height: 250 }
+                    // Configurações otimizadas para melhor performance
+                    const config = {
+                        fps: 30, // FPS mais alto para detecção rápida
+                        qrbox: { width: 300, height: 300 }, // Área maior
+                        aspectRatio: 1.0,
+                        disableFlip: false,
+                        experimentalFeatures: {
+                            useBarCodeDetectorIfSupported: true // API nativa do browser
                         },
+                        rememberLastUsedCamera: true,
+                        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_QR_CODE]
+                    };
+
+                    const cameraConstraints = {
+                        facingMode: "environment",
+                        advanced: [
+                            { focusMode: "continuous" },
+                            { exposureMode: "continuous" },
+                            { whiteBalanceMode: "continuous" }
+                        ]
+                    };
+                    
+                    // Atualizar status
+                    statusText.textContent = 'Conectando à câmera...';
+                    
+                    await this.html5QrCode.start(
+                        cameraConstraints,
+                        config,
                         (qrCodeMessage) => {
-                            this.processQRCode(qrCodeMessage);
+                            console.log('📱 QR Code detectado instantaneamente:', qrCodeMessage);
+                            
+                            // Feedback visual imediato
+                            statusIndicator.className = 'status-indicator ready';
+                            statusText.textContent = '✅ QR Code encontrado!';
+                            
+                            // Processar com pequeno delay para feedback visual
+                            setTimeout(() => {
+                                this.processQRCode(qrCodeMessage);
+                            }, 500);
                         },
                         (errorMessage) => {
-                            // Ignore scan errors
+                            // Silenciar erros de scan, mas mostrar status
+                            if (!statusText.textContent.includes('Aponte')) {
+                                statusIndicator.className = 'status-indicator scanning';
+                                statusText.textContent = '🎯 Aponte para o QR Code';
+                            }
                         }
                     );
                     
+                    // Atualizar interface
                     document.getElementById('start-scan').style.display = 'none';
                     document.getElementById('stop-scan').style.display = 'inline-block';
                     
+                    // Status final
+                    statusIndicator.className = 'status-indicator scanning';
+                    statusText.textContent = '🎯 Aponte para o QR Code';
+                    
+                    // Adicionar dicas
+                    this.showScanTips();
+                    
+                    console.log('✅ Scanner iniciado com sucesso');
+                    
                 } catch (err) {
-                    this.showAlert('Erro ao iniciar scanner: ' + err.message, 'danger');
+                    console.error('❌ Erro detalhado do scanner:', err);
+                    
+                    // Status de erro
+                    const statusText = document.getElementById('status-text');
+                    const statusIndicator = document.getElementById('status-indicator');
+                    
+                    statusIndicator.className = 'status-indicator';
+                    statusText.textContent = '❌ Erro na câmera';
+                    
+                    // Tentar fallback
+                    try {
+                        console.log('🔄 Tentando configuração simplificada...');
+                        await this.startScannerFallback();
+                    } catch (fallbackErr) {
+                        this.showAlert('❌ Não foi possível acessar a câmera. Verifique as permissões e tente novamente.', 'danger');
+                        
+                        // Resetar interface
+                        document.getElementById('qr-reader').style.display = 'none';
+                        document.getElementById('scan-status').style.display = 'none';
+                        document.getElementById('start-scan').style.display = 'inline-block';
+                        document.getElementById('stop-scan').style.display = 'none';
+                    }
                 }
             }
 
+            async startScannerFallback() {
+                console.log('🔄 Iniciando scanner modo compatibilidade...');
+                
+                const statusText = document.getElementById('status-text');
+                const statusIndicator = document.getElementById('status-indicator');
+                
+                statusText.textContent = 'Modo compatibilidade...';
+                
+                const config = {
+                    fps: 15,
+                    qrbox: { width: 250, height: 250 },
+                    aspectRatio: 1.0
+                };
+
+                await this.html5QrCode.start(
+                    { facingMode: "environment" },
+                    config,
+                    (qrCodeMessage) => {
+                        console.log('📱 QR Code detectado (fallback):', qrCodeMessage);
+                        
+                        statusIndicator.className = 'status-indicator ready';
+                        statusText.textContent = '✅ QR Code encontrado!';
+                        
+                        setTimeout(() => {
+                            this.processQRCode(qrCodeMessage);
+                        }, 500);
+                    },
+                    (errorMessage) => {
+                        statusIndicator.className = 'status-indicator scanning';
+                        statusText.textContent = '🎯 Aponte para o QR Code';
+                    }
+                );
+                
+                document.getElementById('start-scan').style.display = 'none';
+                document.getElementById('stop-scan').style.display = 'inline-block';
+                
+                statusIndicator.className = 'status-indicator scanning';
+                statusText.textContent = '🎯 Aponte para o QR Code';
+                
+                this.showScanTips();
+                console.log('✅ Scanner fallback iniciado');
+            }
+
             async stopScanner() {
-                if (this.html5QrCode) {
-                    await this.html5QrCode.stop();
+                try {
+                    if (this.html5QrCode) {
+                        await this.html5QrCode.stop();
+                        console.log('📷 Scanner parado');
+                    }
+                    
+                    // Resetar interface
                     document.getElementById('qr-reader').style.display = 'none';
+                    document.getElementById('scan-status').style.display = 'none';
                     document.getElementById('start-scan').style.display = 'inline-block';
                     document.getElementById('stop-scan').style.display = 'none';
+                    
+                    // Limpar alertas
+                    const alertContainer = document.getElementById('alert-container');
+                    if (alertContainer.innerHTML.includes('Dicas para melhor')) {
+                        alertContainer.innerHTML = '';
+                    }
+                    
+                } catch (err) {
+                    console.log('Erro ao parar scanner:', err);
                 }
             }
 
