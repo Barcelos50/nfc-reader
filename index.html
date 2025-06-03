@@ -451,24 +451,227 @@
             }
 
             async simulateSEFAZQuery(qrData) {
-                // Simular delay de requisição
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                try {
+                    // Primeiro, tentar extrair dados do próprio QR Code
+                    const extractedData = this.extractDataFromQR(qrData);
+                    
+                    if (extractedData.chaveAcesso) {
+                        // Simular consulta real ao SEFAZ (delay realista)
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        
+                        // Em produção, faria requisição para: 
+                        // https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?chNFe=${chaveAcesso}
+                        
+                        const sefazData = await this.consultSEFAZ(extractedData.chaveAcesso);
+                        
+                        return {
+                            id: Date.now().toString(),
+                            qrCode: qrData,
+                            chaveAcesso: extractedData.chaveAcesso,
+                            estabelecimento: sefazData.estabelecimento || 'Estabelecimento não identificado',
+                            valor: extractedData.valor || sefazData.valor || '0.00',
+                            data: extractedData.data || new Date().toISOString().split('T')[0],
+                            hora: extractedData.hora || new Date().toLocaleTimeString('pt-BR'),
+                            categoria: this.categorizeByEstablishment(sefazData.estabelecimento),
+                            cnpj: sefazData.cnpj || extractedData.cnpj || 'Não informado',
+                            numeroNota: extractedData.numeroNota || sefazData.numeroNota || 'Não informado',
+                            itens: sefazData.itens || this.generateMockItems(extractedData.valor),
+                            uf: extractedData.uf || 'BR'
+                        };
+                    } else {
+                        throw new Error('QR Code não contém dados de nota fiscal válidos');
+                    }
+                } catch (error) {
+                    throw new Error('Erro ao processar QR Code: ' + error.message);
+                }
+            }
+
+            extractDataFromQR(qrData) {
+                // Formato típico de QR Code de NFCe:
+                // https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?chNFe=43210814200166000196650010000000046550000000
+                // ou
+                // chNFe=43210814200166000196650010000000046550000000&nVersao=100&tpAmb=2&cDest=&dhEmi=323031322d30382d31355431363a32343a32332d30333a3030&vNF=23.50&vICMS=0.00&digVal=...
                 
-                // Extrair dados básicos do QR (formato simplificado)
-                const mockData = {
-                    id: Date.now().toString(),
-                    qrCode: qrData,
-                    estabelecimento: this.generateRandomEstablishment(),
-                    valor: (Math.random() * 500 + 10).toFixed(2),
-                    data: new Date().toISOString().split('T')[0],
-                    hora: new Date().toLocaleTimeString('pt-BR'),
-                    categoria: this.categorizeAutomatically(),
-                    cnpj: this.generateRandomCNPJ(),
-                    numeroNota: Math.floor(Math.random() * 999999) + 100000,
-                    itens: this.generateRandomItems()
+                const extracted = {
+                    chaveAcesso: null,
+                    valor: null,
+                    data: null,
+                    hora: null,
+                    cnpj: null,
+                    numeroNota: null,
+                    uf: null
                 };
 
-                return mockData;
+                try {
+                    // Tentar extrair chave de acesso
+                    const chaveMatch = qrData.match(/chNFe=([A-Fa-f0-9]{44})/);
+                    if (chaveMatch) {
+                        extracted.chaveAcesso = chaveMatch[1];
+                        
+                        // Extrair informações da chave de acesso (44 dígitos)
+                        // Formato: UF(2) + AAAAMM(6) + CNPJ(14) + MOD(2) + SERIE(3) + NNF(9) + TPEMIS(1) + CODIGO(7)
+                        const uf = extracted.chaveAcesso.substring(0, 2);
+                        const anoMes = extracted.chaveAcesso.substring(2, 8);
+                        const cnpjChave = extracted.chaveAcesso.substring(8, 22);
+                        const numeroNF = extracted.chaveAcesso.substring(25, 34);
+                        
+                        extracted.uf = this.getUFName(uf);
+                        extracted.cnpj = this.formatCNPJ(cnpjChave);
+                        extracted.numeroNota = parseInt(numeroNF).toString();
+                        
+                        // Extrair data da chave
+                        const ano = '20' + anoMes.substring(0, 2);
+                        const mes = anoMes.substring(2, 4);
+                        extracted.data = `${ano}-${mes}-01`; // Aproximação do mês
+                    }
+
+                    // Tentar extrair valor
+                    const valorMatch = qrData.match(/vNF=([0-9.,]+)/);
+                    if (valorMatch) {
+                        extracted.valor = valorMatch[1].replace(',', '.');
+                    }
+
+                    // Tentar extrair data/hora de emissão
+                    const dhEmiMatch = qrData.match(/dhEmi=([^&]+)/);
+                    if (dhEmiMatch) {
+                        try {
+                            const dhEmiDecoded = decodeURIComponent(dhEmiMatch[1]);
+                            const dataHora = dhEmiDecoded.split('T');
+                            if (dataHora.length === 2) {
+                                extracted.data = dataHora[0];
+                                extracted.hora = dataHora[1].split('-')[0]; // Remove timezone
+                            }
+                        } catch (e) {
+                            // Ignore decode errors
+                        }
+                    }
+
+                } catch (error) {
+                    console.log('Erro ao extrair dados do QR:', error);
+                }
+
+                return extracted;
+            }
+
+            getUFName(codigo) {
+                const ufs = {
+                    '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO',
+                    '21': 'MA', '22': 'PI', '23': 'CE', '24': 'RN', '25': 'PB', '26': 'PE', '27': 'AL', '28': 'SE', '29': 'BA',
+                    '31': 'MG', '32': 'ES', '33': 'RJ', '35': 'SP',
+                    '41': 'PR', '42': 'SC', '43': 'RS',
+                    '50': 'MS', '51': 'MT', '52': 'GO', '53': 'DF'
+                };
+                return ufs[codigo] || codigo;
+            }
+
+            formatCNPJ(cnpj) {
+                // Formatar CNPJ: 12345678000195 -> 12.345.678/0001-95
+                if (cnpj.length === 14) {
+                    return cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+                }
+                return cnpj;
+            }
+
+            async consultSEFAZ(chaveAcesso) {
+                // Em produção, aqui faria a consulta real ao SEFAZ
+                // Por enquanto, simular com base na chave de acesso
+                
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                
+                // Simular dados baseados na chave
+                const uf = chaveAcesso.substring(0, 2);
+                const cnpjChave = chaveAcesso.substring(8, 22);
+                
+                return {
+                    estabelecimento: this.getEstablishmentByCNPJ(cnpjChave),
+                    cnpj: this.formatCNPJ(cnpjChave),
+                    valor: (Math.random() * 200 + 10).toFixed(2),
+                    numeroNota: parseInt(chaveAcesso.substring(25, 34)).toString(),
+                    itens: this.generateRealisticItems(),
+                    uf: this.getUFName(uf)
+                };
+            }
+
+            getEstablishmentByCNPJ(cnpj) {
+                // Mapear alguns CNPJs conhecidos para estabelecimentos reais
+                const establishments = {
+                    '47508411000135': 'Extra Supermercados',
+                    '47960950000114': 'Carrefour',
+                    '17351074000118': 'Walmart Brasil',
+                    '33014556000196': 'Casas Bahia',
+                    '59291534000107': 'Magazine Luiza',
+                    '33000167000101': 'Pão de Açúcar'
+                };
+                
+                return establishments[cnpj] || this.generateRandomEstablishment();
+            }
+
+            generateRealisticItems() {
+                const products = [
+                    { nome: 'Arroz Branco 5kg', quantidade: 1, valor: '22.90' },
+                    { nome: 'Feijão Preto 1kg', quantidade: 2, valor: '8.50' },
+                    { nome: 'Óleo de Soja 900ml', quantidade: 1, valor: '6.90' },
+                    { nome: 'Açúcar Cristal 1kg', quantidade: 1, valor: '4.20' },
+                    { nome: 'Café Torrado 500g', quantidade: 1, valor: '12.80' },
+                    { nome: 'Leite Integral 1L', quantidade: 3, valor: '4.50' },
+                    { nome: 'Pão de Forma', quantidade: 1, valor: '5.90' },
+                    { nome: 'Margarina 500g', quantidade: 1, valor: '7.20' }
+                ];
+                
+                const numItems = Math.floor(Math.random() * 5) + 1;
+                return products.slice(0, numItems);
+            }
+
+            generateMockItems(totalValue) {
+                if (!totalValue) return this.generateRealisticItems();
+                
+                const value = parseFloat(totalValue);
+                const numItems = Math.floor(Math.random() * 3) + 1;
+                const itemValue = (value / numItems).toFixed(2);
+                
+                return Array.from({length: numItems}, (_, i) => ({
+                    nome: `Item ${i + 1}`,
+                    quantidade: 1,
+                    valor: itemValue
+                }));
+            }
+
+            categorizeByEstablishment(establishment) {
+                if (!establishment) return 'outros';
+                
+                const name = establishment.toLowerCase();
+                
+                if (name.includes('supermercado') || name.includes('mercado') || 
+                    name.includes('extra') || name.includes('carrefour') || 
+                    name.includes('pão de açúcar')) {
+                    return 'alimentacao';
+                }
+                
+                if (name.includes('posto') || name.includes('shell') || 
+                    name.includes('petrobras') || name.includes('ipiranga')) {
+                    return 'transporte';
+                }
+                
+                if (name.includes('farmácia') || name.includes('drogaria')) {
+                    return 'saude';
+                }
+                
+                if (name.includes('livraria') || name.includes('cultura') || 
+                    name.includes('escola') || name.includes('curso')) {
+                    return 'educacao';
+                }
+                
+                if (name.includes('magazine') || name.includes('casas bahia') || 
+                    name.includes('lojas')) {
+                    return 'casa';
+                }
+                
+                if (name.includes('restaurant') || name.includes('lanchonete') || 
+                    name.includes('pizza') || name.includes('mcdonald')) {
+                    return 'lazer';
+                }
+                
+                return 'outros';
             }
 
             generateRandomEstablishment() {
@@ -648,17 +851,19 @@
                     <div style="margin: 20px 0;">
                         <p><strong>Estabelecimento:</strong> ${note.estabelecimento}</p>
                         <p><strong>CNPJ:</strong> ${note.cnpj}</p>
+                        ${note.chaveAcesso ? `<p><strong>Chave de Acesso:</strong> ${note.chaveAcesso}</p>` : ''}
                         <p><strong>Data:</strong> ${new Date(note.data).toLocaleDateString('pt-BR')}</p>
                         <p><strong>Hora:</strong> ${note.hora}</p>
                         <p><strong>Valor Total:</strong> R$ ${parseFloat(note.valor).toFixed(2).replace('.', ',')}</p>
                         <p><strong>Categoria:</strong> ${this.categories[note.categoria].name}</p>
                         <p><strong>Número da Nota:</strong> ${note.numeroNota}</p>
+                        ${note.uf ? `<p><strong>UF:</strong> ${note.uf}</p>` : ''}
                     </div>
                     
                     <h3>🛒 Itens</h3>
                     <div style="margin: 15px 0;">
                         ${note.itens.map(item => `
-                            <p>${item.nome} - Qtd: ${item.quantidade} - R$ ${item.valor}</p>
+                            <p>• ${item.nome} - Qtd: ${item.quantidade} - R$ ${item.valor}</p>
                         `).join('')}
                     </div>
                     
