@@ -751,6 +751,31 @@
                 console.log('🔍 EXTRAINDO INFORMAÇÕES BÁSICAS DO QR');
                 console.log('Analisando QR genérico:', qrData);
                 
+                // Se for apenas números, pode ser um código de produto ou identificador
+                if (/^\d+$/.test(qrData)) {
+                    console.log('📱 QR Code numérico detectado:', qrData);
+                    
+                    return {
+                        id: Date.now().toString(),
+                        qrCode: qrData,
+                        estabelecimento: 'QR Code Genérico',
+                        valor: '0.00',
+                        data: new Date().toISOString().split('T')[0],
+                        hora: new Date().toLocaleTimeString('pt-BR'),
+                        categoria: 'outros',
+                        cnpj: 'Não informado',
+                        numeroNota: qrData,
+                        itens: [{
+                            nome: `Código escaneado: ${qrData}`,
+                            quantidade: 1,
+                            valor: '0.00'
+                        }],
+                        uf: 'BR',
+                        hasValidInfo: true,
+                        tipo: 'generico'
+                    };
+                }
+                
                 // Tentar encontrar padrões comuns
                 const patterns = {
                     valor: [
@@ -838,6 +863,17 @@
                 if (extracted.hasValidInfo) {
                     extracted.categoria = this.categorizeByEstablishment(extracted.estabelecimento);
                     extracted.itens = this.generateMockItems(extracted.valor);
+                } else {
+                    // QR Code não reconhecido - criar entrada básica
+                    console.log('⚠️ QR Code não contém dados fiscais reconhecidos');
+                    extracted.estabelecimento = 'QR Code Não Fiscal';
+                    extracted.numeroNota = qrData.substring(0, 20); // Primeiros 20 caracteres
+                    extracted.itens = [{
+                        nome: `QR Code: ${qrData.substring(0, 50)}${qrData.length > 50 ? '...' : ''}`,
+                        quantidade: 1,
+                        valor: '0.00'
+                    }];
+                    extracted.hasValidInfo = true; // Permitir salvamento
                 }
                 
                 console.log('📋 INFO BÁSICA FINAL:', extracted);
