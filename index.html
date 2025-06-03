@@ -484,7 +484,7 @@
 
             async startScanner() {
                 try {
-                    console.log('🚀 Iniciando scanner otimizado...');
+                    console.log('🚀 Iniciando scanner (modo Safari otimizado)...');
                     
                     const qrReader = document.getElementById('qr-reader');
                     const scanStatus = document.getElementById('scan-status');
@@ -499,26 +499,17 @@
                     
                     this.html5QrCode = new Html5Qrcode("qr-reader");
                     
-                    // Configurações otimizadas para melhor performance
+                    // Configurações simplificadas para compatibilidade com Safari
                     const config = {
-                        fps: 30, // FPS mais alto para detecção rápida
-                        qrbox: { width: 300, height: 300 }, // Área maior
+                        fps: 15,
+                        qrbox: { width: 250, height: 250 },
                         aspectRatio: 1.0,
-                        disableFlip: false,
-                        experimentalFeatures: {
-                            useBarCodeDetectorIfSupported: true // API nativa do browser
-                        },
-                        rememberLastUsedCamera: true,
-                        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_QR_CODE]
+                        disableFlip: false
                     };
 
+                    // Constraints simples para Safari
                     const cameraConstraints = {
-                        facingMode: "environment",
-                        advanced: [
-                            { focusMode: "continuous" },
-                            { exposureMode: "continuous" },
-                            { whiteBalanceMode: "continuous" }
-                        ]
+                        facingMode: "environment"
                     };
                     
                     // Atualizar status
@@ -528,7 +519,7 @@
                         cameraConstraints,
                         config,
                         (qrCodeMessage) => {
-                            console.log('📱 QR Code detectado instantaneamente:', qrCodeMessage);
+                            console.log('📱 QR Code detectado:', qrCodeMessage);
                             
                             // Feedback visual imediato
                             statusIndicator.className = 'status-indicator ready';
@@ -540,7 +531,7 @@
                             }, 500);
                         },
                         (errorMessage) => {
-                            // Silenciar erros de scan, mas mostrar status
+                            // Status de procurando
                             if (!statusText.textContent.includes('Aponte')) {
                                 statusIndicator.className = 'status-indicator scanning';
                                 statusText.textContent = '🎯 Aponte para o QR Code';
@@ -571,12 +562,13 @@
                     statusIndicator.className = 'status-indicator';
                     statusText.textContent = '❌ Erro na câmera';
                     
-                    // Tentar fallback
+                    // Tentar modo básico
                     try {
-                        console.log('🔄 Tentando configuração simplificada...');
-                        await this.startScannerFallback();
+                        console.log('🔄 Tentando modo básico...');
+                        await this.startBasicScanner();
                     } catch (fallbackErr) {
-                        this.showAlert('❌ Não foi possível acessar a câmera. Verifique as permissões e tente novamente.', 'danger');
+                        console.error('❌ Fallback também falhou:', fallbackErr);
+                        this.showAlert('❌ Não foi possível acessar a câmera. Certifique-se de permitir o acesso e tente novamente.', 'danger');
                         
                         // Resetar interface
                         document.getElementById('qr-reader').style.display = 'none';
@@ -587,47 +579,70 @@
                 }
             }
 
-            async startScannerFallback() {
-                console.log('🔄 Iniciando scanner modo compatibilidade...');
+            async startBasicScanner() {
+                console.log('🔄 Iniciando scanner modo básico...');
                 
                 const statusText = document.getElementById('status-text');
                 const statusIndicator = document.getElementById('status-indicator');
                 
-                statusText.textContent = 'Modo compatibilidade...';
+                statusText.textContent = 'Modo básico...';
                 
+                // Configurações mínimas
                 const config = {
-                    fps: 15,
-                    qrbox: { width: 250, height: 250 },
-                    aspectRatio: 1.0
+                    fps: 10,
+                    qrbox: { width: 200, height: 200 }
                 };
 
-                await this.html5QrCode.start(
+                // Tentar diferentes constraints
+                const constraints = [
                     { facingMode: "environment" },
-                    config,
-                    (qrCodeMessage) => {
-                        console.log('📱 QR Code detectado (fallback):', qrCodeMessage);
+                    { facingMode: { exact: "environment" } },
+                    { video: true },
+                    "environment"
+                ];
+
+                for (let i = 0; i < constraints.length; i++) {
+                    try {
+                        console.log(`Tentando constraint ${i + 1}:`, constraints[i]);
                         
-                        statusIndicator.className = 'status-indicator ready';
-                        statusText.textContent = '✅ QR Code encontrado!';
+                        await this.html5QrCode.start(
+                            constraints[i],
+                            config,
+                            (qrCodeMessage) => {
+                                console.log('📱 QR Code detectado (básico):', qrCodeMessage);
+                                
+                                statusIndicator.className = 'status-indicator ready';
+                                statusText.textContent = '✅ QR Code encontrado!';
+                                
+                                setTimeout(() => {
+                                    this.processQRCode(qrCodeMessage);
+                                }, 500);
+                            },
+                            (errorMessage) => {
+                                statusIndicator.className = 'status-indicator scanning';
+                                statusText.textContent = '🎯 Aponte para o QR Code';
+                            }
+                        );
                         
-                        setTimeout(() => {
-                            this.processQRCode(qrCodeMessage);
-                        }, 500);
-                    },
-                    (errorMessage) => {
+                        // Se chegou aqui, funcionou
+                        document.getElementById('start-scan').style.display = 'none';
+                        document.getElementById('stop-scan').style.display = 'inline-block';
+                        
                         statusIndicator.className = 'status-indicator scanning';
                         statusText.textContent = '🎯 Aponte para o QR Code';
+                        
+                        this.showScanTips();
+                        console.log(`✅ Scanner básico iniciado com constraint ${i + 1}`);
+                        return; // Sucesso, sair do loop
+                        
+                    } catch (error) {
+                        console.log(`❌ Constraint ${i + 1} falhou:`, error);
+                        if (i === constraints.length - 1) {
+                            throw error; // Se foi a última tentativa, propagar o erro
+                        }
+                        // Continuar para próxima constraint
                     }
-                );
-                
-                document.getElementById('start-scan').style.display = 'none';
-                document.getElementById('stop-scan').style.display = 'inline-block';
-                
-                statusIndicator.className = 'status-indicator scanning';
-                statusText.textContent = '🎯 Aponte para o QR Code';
-                
-                this.showScanTips();
-                console.log('✅ Scanner fallback iniciado');
+                }
             }
 
             async stopScanner() {
