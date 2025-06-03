@@ -249,19 +249,18 @@
                 const nfData = {
                     type: 'Texto',
                     chaveAcesso: null,
-                    estabelecimento: 'Não informado',
-                    valor: null,
-                    data: null,
-                    hora: null,
+                    estabelecimento: 'Não disponível (requer consulta SEFAZ)',
+                    valor: 'Não disponível (requer consulta SEFAZ)',
+                    data: 'Não disponível (requer consulta SEFAZ)',
+                    hora: 'Não disponível (requer consulta SEFAZ)',
                     uf: null,
-                    cnpj: null,
-                    numeroNota: null
+                    cnpj: 'Não disponível (requer consulta SEFAZ)',
+                    numeroNota: 'Não disponível (requer consulta SEFAZ)',
+                    urlConsulta: null
                 };
 
                 try {
                     // FORMATO: URL do SEFAZ com parâmetros
-                    // https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p=chave|versao|ambiente|params...
-                    
                     if (qrContent.includes('sefaz') && qrContent.includes('NFCE')) {
                         nfData.type = 'Nota Fiscal';
                         
@@ -278,59 +277,41 @@
                                 if (chaveAcesso && chaveAcesso.length === 44 && /^[0-9]+$/.test(chaveAcesso)) {
                                     nfData.chaveAcesso = chaveAcesso;
                                     
-                                    // Extrair dados da chave de acesso
-                                    // Formato: UF(2) + AAAAMM(6) + CNPJ(14) + MOD(2) + SERIE(3) + NNF(9) + TPEMIS(1) + CODIGO(7)
+                                    // APENAS extrair UF (isso é confiável)
                                     const uf = chaveAcesso.substring(0, 2);
-                                    const anoMes = chaveAcesso.substring(2, 8);
-                                    const cnpj = chaveAcesso.substring(8, 22);
-                                    const numeroNF = chaveAcesso.substring(25, 34);
-                                    
                                     nfData.uf = this.getUFName(uf);
-                                    nfData.cnpj = this.formatCNPJ(cnpj);
-                                    nfData.numeroNota = parseInt(numeroNF, 10).toString();
                                     
-                                    // Construir data a partir da chave
-                                    const ano = '20' + anoMes.substring(0, 2);
-                                    const mes = anoMes.substring(2, 4);
-                                    const dia = anoMes.substring(4, 6);
+                                    // Criar URL de consulta para o usuário
+                                    nfData.urlConsulta = this.buildConsultaURL(nfData.uf, chaveAcesso);
                                     
-                                    if (ano && mes && dia) {
-                                        nfData.data = `${dia}/${mes}/${ano}`;
-                                    }
-                                    
-                                    console.log('✅ Dados extraídos da chave:');
+                                    console.log('✅ Dados CONFIÁVEIS extraídos:');
+                                    console.log('  Chave:', nfData.chaveAcesso);
                                     console.log('  UF:', nfData.uf);
-                                    console.log('  CNPJ:', nfData.cnpj);
-                                    console.log('  Data:', nfData.data);
-                                    console.log('  Número NF:', nfData.numeroNota);
+                                    console.log('  URL Consulta:', nfData.urlConsulta);
                                 }
                                 
-                                // Se tem mais parâmetros, pode ter valor
-                                if (params.length >= 5) {
-                                    // Em NFCe offline: chave|versao|ambiente|dia|valor|...
+                                // Se tem valor nos parâmetros (NFCe offline), pode ser confiável
+                                if (params.length >= 5 && params[4]) {
                                     const possibleValue = params[4];
-                                    if (possibleValue && /^[0-9.,]+$/.test(possibleValue)) {
+                                    if (/^[0-9.,]+$/.test(possibleValue)) {
                                         nfData.valor = `R$ ${parseFloat(possibleValue.replace(',', '.')).toFixed(2).replace('.', ',')}`;
-                                        console.log('💰 Valor encontrado:', nfData.valor);
+                                        console.log('💰 Valor encontrado nos parâmetros:', nfData.valor);
                                     }
                                 }
                             }
                         }
-                        
-                        // Tentar extrair estabelecimento baseado na UF
-                        if (nfData.uf) {
-                            nfData.estabelecimento = `Estabelecimento em ${nfData.uf}`;
-                        }
                     }
                     
-                    // Se não conseguiu extrair pela URL, tentar outros formatos
+                    // Outros formatos
                     else if (qrContent.includes('chNFe=')) {
                         nfData.type = 'Nota Fiscal';
                         
                         const chaveMatch = qrContent.match(/chNFe=([0-9]{44})/);
                         if (chaveMatch) {
                             nfData.chaveAcesso = chaveMatch[1];
-                            // Processar chave... (mesmo código acima)
+                            const uf = nfData.chaveAcesso.substring(0, 2);
+                            nfData.uf = this.getUFName(uf);
+                            nfData.urlConsulta = this.buildConsultaURL(nfData.uf, nfData.chaveAcesso);
                         }
                     }
                     
@@ -345,6 +326,54 @@
                 
                 console.log('📋 Dados finais extraídos:', nfData);
                 return nfData;
+            }
+
+            buildConsultaURL(uf, chaveAcesso) {
+                // URLs oficiais dos SEFAZ por estado
+                const sefazUrls = {
+                    'RS': 'https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx',
+                    'SP': 'https://www.nfce.fazenda.sp.gov.br/qrcode',
+                    'RJ': 'https://www.nfce.fazenda.rj.gov.br/qrcode',
+                    'MG': 'https://portalsped.fazenda.mg.gov.br/portalnfce/sistema/qrcode.xhtml',
+                    'SC': 'https://sat.sef.sc.gov.br/nfce/qrcode',
+                    'PR': 'https://www.fazenda.pr.gov.br/nfce/qrcode'
+                };
+                
+                const baseUrl = sefazUrls[uf] || 'https://www.nfce.sefaz.gov.br/qrcode';
+                return `${baseUrl}?chNFe=${chaveAcesso}`;
+            }
+
+            formatQRDisplay(nfData) {
+                if (nfData.type === 'Nota Fiscal' && nfData.chaveAcesso) {
+                    return `
+                        <strong>🧾 NOTA FISCAL ELETRÔNICA</strong><br><br>
+                        
+                        <strong>Chave de Acesso:</strong><br>
+                        <code style="font-size: 12px; background: #f0f0f0; padding: 5px; border-radius: 3px; display: block; margin: 5px 0;">${nfData.chaveAcesso}</code>
+                        
+                        <strong>UF:</strong> ${nfData.uf}<br><br>
+                        
+                        <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; padding: 15px; margin: 15px 0;">
+                            <strong>⚠️ IMPORTANTE:</strong><br>
+                            Para ver os dados completos (estabelecimento, valor, data, itens), 
+                            você precisa consultar no site oficial do SEFAZ:<br><br>
+                            <a href="${nfData.urlConsulta}" target="_blank" style="color: #007bff; text-decoration: underline;">
+                                🔗 Consultar Nota no SEFAZ ${nfData.uf}
+                            </a>
+                        </div>
+                        
+                        ${nfData.valor && nfData.valor !== 'Não disponível (requer consulta SEFAZ)' ? 
+                            `<strong>Valor (extraído do QR):</strong> ${nfData.valor}<br>` : ''
+                        }
+                        
+                        <small style="color: #666;">
+                            <strong>Por que não mostra todos os dados?</strong><br>
+                            Os dados completos ficam no servidor do SEFAZ. Para acessá-los seria necessário uma API oficial ou consulta direta no site.
+                        </small>
+                    `;
+                } else {
+                    return `<strong>Conteúdo:</strong> ${qrContent}`;
+                }
             }
 
             getUFName(codigo) {
