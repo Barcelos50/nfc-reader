@@ -217,26 +217,169 @@
             onScanSuccess(qrCodeMessage) {
                 console.log('QR Code detectado:', qrCodeMessage);
                 
+                // Extrair dados reais da nota fiscal
+                const nfData = this.extractNFData(qrCodeMessage);
+                
                 // Mostrar resultado
-                document.getElementById('qr-content').textContent = qrCodeMessage;
+                document.getElementById('qr-content').innerHTML = this.formatQRDisplay(nfData);
                 document.getElementById('result').style.display = 'block';
                 
-                // Salvar QR Code
+                // Salvar QR Code com dados extraídos
                 const qrData = {
                     id: Date.now(),
                     content: qrCodeMessage,
                     timestamp: new Date().toLocaleString('pt-BR'),
-                    type: this.detectQRType(qrCodeMessage)
+                    type: nfData.type,
+                    nfData: nfData
                 };
                 
                 this.scannedCodes.unshift(qrData);
                 localStorage.setItem('qr-codes', JSON.stringify(this.scannedCodes));
                 
                 this.renderNotes();
-                this.showAlert('QR Code salvo com sucesso!', 'success');
+                this.showAlert('Nota fiscal processada com sucesso!', 'success');
                 
                 // Parar scanner automaticamente
                 this.stopScanner();
+            }
+
+            extractNFData(qrContent) {
+                console.log('🔍 Extraindo dados da nota fiscal...');
+                
+                const nfData = {
+                    type: 'Texto',
+                    chaveAcesso: null,
+                    estabelecimento: 'Não informado',
+                    valor: null,
+                    data: null,
+                    hora: null,
+                    uf: null,
+                    cnpj: null,
+                    numeroNota: null
+                };
+
+                try {
+                    // FORMATO: URL do SEFAZ com parâmetros
+                    // https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p=chave|versao|ambiente|params...
+                    
+                    if (qrContent.includes('sefaz') && qrContent.includes('NFCE')) {
+                        nfData.type = 'Nota Fiscal';
+                        
+                        // Extrair parâmetros da URL
+                        const urlMatch = qrContent.match(/\?p=([^&]+)/);
+                        if (urlMatch) {
+                            const params = urlMatch[1].split('|');
+                            console.log('📊 Parâmetros encontrados:', params);
+                            
+                            if (params.length > 0) {
+                                const chaveAcesso = params[0];
+                                
+                                // Validar se é uma chave de 44 dígitos
+                                if (chaveAcesso && chaveAcesso.length === 44 && /^[0-9]+$/.test(chaveAcesso)) {
+                                    nfData.chaveAcesso = chaveAcesso;
+                                    
+                                    // Extrair dados da chave de acesso
+                                    // Formato: UF(2) + AAAAMM(6) + CNPJ(14) + MOD(2) + SERIE(3) + NNF(9) + TPEMIS(1) + CODIGO(7)
+                                    const uf = chaveAcesso.substring(0, 2);
+                                    const anoMes = chaveAcesso.substring(2, 8);
+                                    const cnpj = chaveAcesso.substring(8, 22);
+                                    const numeroNF = chaveAcesso.substring(25, 34);
+                                    
+                                    nfData.uf = this.getUFName(uf);
+                                    nfData.cnpj = this.formatCNPJ(cnpj);
+                                    nfData.numeroNota = parseInt(numeroNF, 10).toString();
+                                    
+                                    // Construir data a partir da chave
+                                    const ano = '20' + anoMes.substring(0, 2);
+                                    const mes = anoMes.substring(2, 4);
+                                    const dia = anoMes.substring(4, 6);
+                                    
+                                    if (ano && mes && dia) {
+                                        nfData.data = `${dia}/${mes}/${ano}`;
+                                    }
+                                    
+                                    console.log('✅ Dados extraídos da chave:');
+                                    console.log('  UF:', nfData.uf);
+                                    console.log('  CNPJ:', nfData.cnpj);
+                                    console.log('  Data:', nfData.data);
+                                    console.log('  Número NF:', nfData.numeroNota);
+                                }
+                                
+                                // Se tem mais parâmetros, pode ter valor
+                                if (params.length >= 5) {
+                                    // Em NFCe offline: chave|versao|ambiente|dia|valor|...
+                                    const possibleValue = params[4];
+                                    if (possibleValue && /^[0-9.,]+$/.test(possibleValue)) {
+                                        nfData.valor = `R$ ${parseFloat(possibleValue.replace(',', '.')).toFixed(2).replace('.', ',')}`;
+                                        console.log('💰 Valor encontrado:', nfData.valor);
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Tentar extrair estabelecimento baseado na UF
+                        if (nfData.uf) {
+                            nfData.estabelecimento = `Estabelecimento em ${nfData.uf}`;
+                        }
+                    }
+                    
+                    // Se não conseguiu extrair pela URL, tentar outros formatos
+                    else if (qrContent.includes('chNFe=')) {
+                        nfData.type = 'Nota Fiscal';
+                        
+                        const chaveMatch = qrContent.match(/chNFe=([0-9]{44})/);
+                        if (chaveMatch) {
+                            nfData.chaveAcesso = chaveMatch[1];
+                            // Processar chave... (mesmo código acima)
+                        }
+                    }
+                    
+                    // Outros tipos de QR
+                    else {
+                        nfData.type = this.detectQRType(qrContent);
+                    }
+                    
+                } catch (error) {
+                    console.error('Erro ao extrair dados:', error);
+                }
+                
+                console.log('📋 Dados finais extraídos:', nfData);
+                return nfData;
+            }
+
+            getUFName(codigo) {
+                const ufs = {
+                    '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO',
+                    '21': 'MA', '22': 'PI', '23': 'CE', '24': 'RN', '25': 'PB', '26': 'PE', '27': 'AL', '28': 'SE', '29': 'BA',
+                    '31': 'MG', '32': 'ES', '33': 'RJ', '35': 'SP',
+                    '41': 'PR', '42': 'SC', '43': 'RS',
+                    '50': 'MS', '51': 'MT', '52': 'GO', '53': 'DF'
+                };
+                return ufs[codigo] || codigo;
+            }
+
+            formatCNPJ(cnpj) {
+                if (cnpj && cnpj.length === 14) {
+                    return cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+                }
+                return cnpj;
+            }
+
+            formatQRDisplay(nfData) {
+                if (nfData.type === 'Nota Fiscal' && nfData.chaveAcesso) {
+                    return `
+                        <strong>🧾 NOTA FISCAL ELETRÔNICA</strong><br><br>
+                        <strong>Chave de Acesso:</strong> ${nfData.chaveAcesso}<br>
+                        <strong>UF:</strong> ${nfData.uf || 'Não identificado'}<br>
+                        <strong>CNPJ:</strong> ${nfData.cnpj || 'Não identificado'}<br>
+                        <strong>Número da Nota:</strong> ${nfData.numeroNota || 'Não identificado'}<br>
+                        <strong>Data de Emissão:</strong> ${nfData.data || 'Não identificado'}<br>
+                        ${nfData.valor ? `<strong>Valor:</strong> ${nfData.valor}<br>` : ''}
+                        <strong>Estabelecimento:</strong> ${nfData.estabelecimento}
+                    `;
+                } else {
+                    return `<strong>Conteúdo:</strong> ${nfData.content || 'Conteúdo não identificado'}`;
+                }
             }
 
             detectQRType(content) {
@@ -259,15 +402,32 @@
                     return;
                 }
 
-                container.innerHTML = this.scannedCodes.map(code => `
-                    <div class="note-item">
-                        <div class="note-title">${code.type}</div>
-                        <div class="note-details">
-                            <strong>Conteúdo:</strong> ${code.content.substring(0, 100)}${code.content.length > 100 ? '...' : ''}<br>
-                            <strong>Data:</strong> ${code.timestamp}
-                        </div>
-                    </div>
-                `).join('');
+                container.innerHTML = this.scannedCodes.map(code => {
+                    if (code.nfData && code.nfData.type === 'Nota Fiscal') {
+                        return `
+                            <div class="note-item">
+                                <div class="note-title">🧾 ${code.type} - ${code.nfData.uf || 'UF'}</div>
+                                <div class="note-details">
+                                    <strong>CNPJ:</strong> ${code.nfData.cnpj || 'Não identificado'}<br>
+                                    <strong>Nota:</strong> ${code.nfData.numeroNota || 'Não identificado'}<br>
+                                    <strong>Data:</strong> ${code.nfData.data || 'Não identificado'}<br>
+                                    ${code.nfData.valor ? `<strong>Valor:</strong> ${code.nfData.valor}<br>` : ''}
+                                    <strong>Escaneado em:</strong> ${code.timestamp}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        return `
+                            <div class="note-item">
+                                <div class="note-title">${code.type}</div>
+                                <div class="note-details">
+                                    <strong>Conteúdo:</strong> ${code.content.substring(0, 100)}${code.content.length > 100 ? '...' : ''}<br>
+                                    <strong>Data:</strong> ${code.timestamp}
+                                </div>
+                            </div>
+                        `;
+                    }
+                }).join('');
             }
 
             showAlert(message, type) {
